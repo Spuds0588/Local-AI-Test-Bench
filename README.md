@@ -4,6 +4,10 @@ A single-page, fully **client-side** test bench for running small language model
 
 Everything runs locally: model weights download once from Hugging Face (or are vendored into this repo in Needle 2's case) and are cached by your browser.
 
+> ▶️ **Try it now:** the bench is hosted on GitHub Pages at
+> **[https://spuds0588.github.io/Local-AI-Test-Bench/](https://spuds0588.github.io/Local-AI-Test-Bench/)**
+> (models download on first use — see [Browser requirements](#browser-requirements)).
+
 ## Features
 
 - **Side-by-side comparison** — select any number of models and run the same prompt across all of them in parallel; each model gets its own streaming card.
@@ -51,7 +55,9 @@ A deploy workflow is included at `.github/workflows/pages.yml`.
 3. Set **Source** to **GitHub Actions**.
 4. Push to `main` (or run the workflow manually from the **Actions** tab).
 
-The site is published at `https://<user>.github.io/<repo>/`. `index.html` sits at the repo root, so it becomes the landing page.
+The site is published at `https://<user>.github.io/<repo>/` — for this repo:
+**https://spuds0588.github.io/Local-AI-Test-Bench/**.
+`index.html` sits at the repo root, so it becomes the landing page.
 
 ### Important GitHub Pages note
 
