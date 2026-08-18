@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local SLM Test Bench — Side-by-Side</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/diff@5.2.0/dist/diff.min.js"></script>
+  <!-- Vendored Needle 2 engine (Emscripten glue). Defines global `createNeedle`. -->
+  <script src="vendor/needle/needle.js"></script>
+
+  <style>
+    :root {
+      --bg: #1e1e2e; --surface: #2a2a3c; --surface2: #181825;
+      --text: #cdd6f4; --muted: #a6adc8; --accent: #89b4fa;
+      --danger: #f38ba8; --success: #a6e3a1; --warn: #f9e2af;
+      --border: #45475a;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body { background: var(--bg); color: var(--text); margin: 0; padding: 2rem; display: flex; justify-content: center; }
+    main { width: 100%; max-width: 1400px; display: flex; flex-direction: column; gap: 1.25rem; }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 1.4rem; }
+    h2 { font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; }
+    .subtitle { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+
+    #status { padding: 0.75rem; border-radius: 6px; background: var(--surface); font-size: 0.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .status-ok { border-left: 4px solid var(--success); }
+    .status-err { border-left: 4px solid var(--danger); }
+    .status-warn { border-left: 4px solid var(--warn); }
+    #chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .chip { font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .chip.ok { color: var(--success); border-color: rgba(166,227,161,.4); }
+    .chip.warn { color: var(--warn); border-color: rgba(249,226,175,.4); }
+    .chip.err { color: var(--danger); border-color: rgba(243,139,168,.4); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .hint { color: var(--muted); font-size: 0.78rem; font-weight: normal; }
+
+    label { display: flex; flex-direction: column; gap: 0.35rem; font-weight: 500; font-size: 0.85rem; }
+    textarea, input, select { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 0.65rem; border-radius: 6px; resize: vertical; font-size: 0.9rem; }
+    input[type="number"] { width: 90px; }
+    input[type="text"], input[type="url"] { width: 100%; }
+    textarea:focus, input:focus, select:focus { outline: 1px solid var(--accent); }
+    select { cursor: pointer; }
+
+    .row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+    .row.wrap { align-items: center; }
+    .checkbox-label { flex-direction: row; align-items: center; cursor: pointer; font-weight: normal; }
+
+    button { background: var(--accent); color: #11111b; border: none; padding: 0.65rem 1.3rem; border-radius: 6px; font-weight: bold; cursor: pointer; transition: opacity 0.2s; font-size: 0.9rem; }
+    button:hover { opacity: 0.9; }
+    button:disabled { background: #585b70; cursor: not-allowed; opacity: 0.5; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-small { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+    .btn-danger { color: var(--danger); }
+    #runBtn { font-size: 1rem; padding: 0.75rem 1.8rem; }
+
+    /* Engine / model picker */
+    #modelGroups { display: flex; flex-direction: column; gap: 0.9rem; }
+    .engine-group { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+    .engine-group > .eg-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.9rem; background: var(--surface2); font-weight: 600; font-size: 0.85rem; }
+    .eg-head .eg-status { font-weight: normal; font-size: 0.72rem; margin-left: auto; }
+    .eg-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.4rem; padding: 0.6rem 0.9rem; }
+    .model-opt { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.82rem; cursor: pointer; padding: 0.25rem 0.3rem; border-radius: 4px; }
+    .model-opt:hover { background: #313244; }
+    .model-opt input { width: auto; margin-top: 2px; }
+    .model-opt .m-label { font-weight: 600; }
+    .model-opt .m-meta { color: var(--muted); font-size: 0.72rem; }
+    .badge { display: inline-block; font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+
+    /* Side-by-side grid */
+    #resultsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
+    .mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; min-height: 240px; }
+    .mcard.state-running { border-color: var(--accent); }
+    .mcard.state-error { border-color: var(--danger); }
+    .mcard.state-done { border-color: var(--border); }
+    .mc-head { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .mc-title { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .mc-title .mc-name { font-weight: 700; font-size: 0.92rem; }
+    .mc-sub { color: var(--muted); font-size: 0.72rem; }
+    .mc-status { font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+    .mc-progress { height: 4px; background: #313244; border-radius: 2px; overflow: hidden; }
+    .mc-progress > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s; }
+    .mc-body { padding: 0.7rem 0.9rem; flex: 1; overflow: auto; font-size: 0.85rem; line-height: 1.45; max-height: 420px; min-height: 140px; white-space: pre-wrap; word-break: break-word; }
+    .mc-body pre { margin: 0; font-family: inherit; white-space: pre-wrap; word-break: break-word; }
+    .mc-body ins { background: rgba(166,227,161,0.2); color: var(--success); text-decoration: none; border-radius: 3px; padding: 0 2px; }
+    .mc-body del { background: rgba(243,139,168,0.2); color: var(--danger); text-decoration: line-through; border-radius: 3px; padding: 0 2px; }
+    .mc-body code { font-family: monospace; background: var(--surface2); padding: 0.1rem 0.3rem; border-radius: 4px; }
+    .mc-body .empty-note { color: var(--muted); font-style: italic; }
+    .mc-foot { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.45rem 0.9rem; border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--muted); }
+    .mc-foot .metric { white-space: nowrap; }
+    .metric b { color: var(--text); font-weight: 600; }
+
+    .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+    .table-container { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem; }
+    th, td { padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { background: var(--surface2); color: var(--muted); white-space: nowrap; }
+    tr { cursor: pointer; transition: background 0.1s; }
+    tbody tr:hover { background: #313244; }
+    tr.active-row { background: #313244; border-left: 3px solid var(--accent); }
+    .cell-trim { max-width: 480px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .diff-badge { font-weight: bold; color: var(--accent); cursor: pointer; }
+    .trophy { color: var(--warn); }
+
+    #printHeader { display: none; margin-bottom: 2rem; border-bottom: 2px solid #ccc; padding-bottom: 1rem; }
+    #printHeader h3 { margin: 0 0 0.5rem 0; font-size: 1rem; color: #555; }
+    #printHeader p { margin: 0 0 1rem 0; white-space: pre-wrap; font-family: monospace; background: #f5f5f5; padding: 1rem; border: 1px solid #ddd; }
+
+    .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media print {
+      body { background: white; color: black; padding: 0; }
+      main > *:not(#historySection) { display: none !important; }
+      #printHeader { display: block; }
+      #historySection, .table-container, table, th, td { border-color: #ccc; background: white !important; color: black !important; }
+      .btn-secondary, h2 { display: none !important; }
+      .cell-trim { max-width: none; white-space: pre-wrap; }
+    }
+  </style>
+</head>
+<body>
+
+  <main>
+    <h1>🧪 Local SLM Test Bench <span class="subtitle">Needle 2 · SmolLM2 · LFM2.5 · FunctionGemma · Qwen · Gemma — fully in-browser</span></h1>
+    <div id="status" class="status-warn"><span id="statusMsg">Checking engines…</span><div id="chips"></div></div>
+
+    <section class="card">
+      <h2>1 · Test Configuration</h2>
+
+      <div class="row">
+        <label>Mode
+          <select id="mode">
+            <option value="chat">💬 Chat / Instruction Following</option>
+            <option value="tool">🛠️ Tool Calling &amp; Structured Output</option>
+          </select>
+        </label>
+        <label>Max Tokens
+          <input type="number" id="maxTokens" value="256" min="16" max="2048">
+        </label>
+        <label>Iterations
+          <input type="number" id="iterations" value="1" min="1" max="50">
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="retainHistory" checked> Retain Context History (Conversational vs Stateless)
+        </label>
+      </div>
+
+      <label>System Prompt
+        <textarea id="sysPrompt" rows="2" placeholder="e.g., Answer in markdown format."></textarea>
+      </label>
+
+      <div id="toolPanel" style="display:none;">
+        <label>Tools (JSON array of function schemas)
+          <textarea id="toolsJson" rows="9" spellcheck="false"></textarea>
+        </label>
+        <p class="hint" style="margin:0;">
+          Tool-calling protocol: <b>Needle 2</b> and <b>FunctionGemma</b> use their native tool formats. All other models
+          receive the tool schemas in the system prompt and are asked to reply with a single JSON object
+          <code>{"function": "...", "arguments": {...}}</code> (or <code>{"function": null}</code> if no tool fits).
+        </p>
+      </div>
+
+      <label>User Prompt / Request
+        <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
+      </label>
+
+      <div class="row">
+        <label>Inject File Context (Max ~20kb)
+          <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css">
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2 · Models to Run <span class="hint">(checked models run side-by-side; weights download once and are cached by your browser)</span></h2>
+      <div id="modelGroups"></div>
+    </section>
+
+    <div class="toolbar">
+      <button id="runBtn">▶ Run Bench</button>
+      <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
+      <button id="clearBtn" class="btn-secondary">Clear Inputs</button>
+      <span id="benchStatus" class="hint"></span>
+    </div>
+
+    <section class="card">
+      <h2>3 · Side-by-Side Results</h2>
+      <div id="resultsGrid"><p class="hint" style="margin:0;">Select models above and press <b>Run Bench</b>. Each model gets its own card; timing and output length are measured per iteration.</p></div>
+    </section>
+
+    <section class="card">
+      <h2>Comparison Summary <span class="hint">(last run)</span></h2>
+      <div class="table-container">
+        <table id="summaryTable">
+          <thead>
+            <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
+          </thead>
+          <tbody><tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="historySection">
+      <div id="printHeader">
+        <h3>Mode</h3><p id="printMode"></p>
+        <h3>System Prompt (Latest)</h3><p id="printSys"></p>
+        <h3>User Prompt (Latest)</h3><p id="printUser"></p>
+        <h3>Tools (Latest)</h3><p id="printTools"></p>
+      </div>
+
+      <div class="row" style="justify-content: space-between; align-items:center;">
+        <h2>4 · Run History</h2>
+        <div class="row" style="gap: 0.5rem;">
+          <button id="exportCsvBtn" class="btn-secondary btn-small">⬇️ CSV</button>
+          <button id="exportPdfBtn" class="btn-secondary btn-small">🖨️ PDF</button>
+          <button id="clearHistoryBtn" class="btn-secondary btn-small btn-danger">🗑️ Clear</button>
+        </div>
+      </div>
+
+      <div class="table-container" style="margin-top:0.75rem;">
+        <table id="historyTable">
+          <thead>
+            <tr><th>Date/Time</th><th>Mode</th><th>Models</th><th>Avg Time (s)</th><th>Avg Δ%</th><th>Prompt Preview</th></tr>
+          </thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    'use strict';
+    const $ = s => document.querySelector(s);
+    const escHTML = s => s.replace(/[&<>'"]/g, tag => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'}[tag]));
+    const fmt = n => (Math.round(n * 100) / 100).toFixed(2);
+
+    /* ============================================================
+     *  Registry — engines and models
+     * ============================================================ */
+    const ENGINES = {
+      builtin:      { name: 'Chrome Built-in AI',       color: '#89b4fa' },
+      needle:       { name: 'Needle 2 (WASM)',          color: '#a6e3a1' },
+      transformers: { name: 'Transformers.js (ONNX)',   color: '#f9e2af' },
+      webllm:       { name: 'WebLLM (WebGPU)',          color: '#f38ba8' },
+    };
+
+    const MODELS = [
+      // ---- Chrome built-in (Gemini Nano) ----
+      { id: 'nano',                 engine: 'builtin',      label: 'Gemini Nano',            params: '~1.8B', size: '~1.5GB', note: 'Chrome built-in AI' },
+      // ---- Needle 2 (vendored WASM) ----
+      { id: 'needle2',              engine: 'needle',       label: 'Needle 2',               params: '45M',   size: '14MB',  note: 'Cactus Compute · agentic tool calling' },
+      // ---- Transformers.js (ONNX, WASM or WebGPU) ----
+      { id: 'tf-smollm2-135m',      engine: 'transformers', repo: 'onnx-community/SmolLM2-135M-Instruct-ONNX',        label: 'SmolLM2-135M-Instruct',    params: '135M', size: '~100MB', note: 'Hugging Face' },
+      { id: 'tf-smollm2-360m',      engine: 'transformers', repo: 'onnx-community/SmolLM2-360M-Instruct-ONNX',        label: 'SmolLM2-360M-Instruct',    params: '360M', size: '~230MB', note: 'Hugging Face' },
+      { id: 'tf-lfm25-350m',        engine: 'transformers', repo: 'onnx-community/LFM2.5-350M-ONNX',                  label: 'LFM2.5-350M',              params: '350M', size: '~240MB', note: 'Liquid AI · hybrid' },
+      { id: 'tf-functiongemma-270m',engine: 'transformers', repo: 'onnx-community/functiongemma-270m-it-ONNX',        label: 'FunctionGemma-270M-it',    params: '270M', size: '~200MB', note: 'Google · native tool calling' },
+      { id: 'tf-qwen3-0.6b',        engine: 'transformers', repo: 'onnx-community/Qwen3-0.6B-ONNX',                   label: 'Qwen3-0.6B',               params: '0.6B', size: '~400MB', note: 'Alibaba' },
+      { id: 'tf-qwen25-0.5b',       engine: 'transformers', repo: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',        label: 'Qwen2.5-0.5B-Instruct',    params: '0.5B', size: '~340MB', note: 'Alibaba' },
+      { id: 'tf-gemma3-1b',         engine: 'transformers', repo: 'onnx-community/gemma-3-1b-it-ONNX',                label: 'Gemma-3-1B-it',            params: '1B',   size: '~750MB', note: 'Google · Gemma terms' },
+      // ---- WebLLM (WebGPU) ----
+      { id: 'wl-qwen3-0.6b',        engine: 'webllm',       wlId: 'Qwen3-0.6B-q4f16_1-MLC',               label: 'Qwen3-0.6B (WebGPU)',      params: '0.6B', size: '~500MB', note: 'Alibaba' },
+      { id: 'wl-qwen25-0.5b',       engine: 'webllm',       wlId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-0.5B-Instruct (WebGPU)', params: '0.5B', size: '~400MB', note: 'Alibaba' },
+      { id: 'wl-qwen25-1.5b',       engine: 'webllm',       wlId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-1.5B-Instruct (WebGPU)', params: '1.5B', size: '~900MB', note: 'Alibaba' },
+      { id: 'wl-gemma3-1b',         engine: 'webllm',       wlId: 'gemma3-1b-it-q4f16_1-MLC',             label: 'Gemma-3-1B-it (WebGPU)',    params: '1B',   size: '~700MB', note: 'Google · Gemma terms' },
+      { id: 'wl-gemma2-2b',         engine: 'webllm',       wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', note: 'Google · Gemma terms' },
+      { id: 'wl-smollm2-1.7b',      engine: 'webllm',       wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', note: 'Hugging Face' },
+      { id: 'wl-smollm2-360m',      engine: 'webllm',       wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', note: 'Hugging Face' },
+    ];
+
+    const DEFAULT_TOOLS = [
+      { "name": "set_lights", "description": "Turn a room's lights on or off and set brightness",
+        "parameters": { "type": "object", "properties": {
+          "room": { "type": "string", "description": "which room to control" },
+          "on": { "type": "boolean" },
+          "brightness": { "type": "integer", "minimum": 0, "maximum": 100 } },
+          "required": ["room", "on"] } },
+      { "name": "set_thermostat", "description": "Set the target temperature and mode of a thermostat",
+        "parameters": { "type": "object", "properties": {
+          "temperature": { "type": "integer", "minimum": 5, "maximum": 35 },
+          "mode": { "type": "string", "enum": ["heat", "cool", "auto"] } },
+          "required": ["temperature", "mode"] } },
+      { "name": "get_weather", "description": "Get the current weather for a city",
+        "parameters": { "type": "object", "properties": { "city": { "type": "string" } }, "required": ["city"] } },
+      { "name": "create_calendar_event", "description": "Create a calendar event",
+        "parameters": { "type": "object", "properties": {
+          "title": { "type": "string" },
+          "start": { "type": "string", "description": "ISO 8601 start time" },
+          "duration_min": { "type": "integer", "minimum": 5, "maximum": 480 } },
+          "required": ["title", "start"] } },
+    ];
+
+    const TOOL_SYSTEM_INSTRUCTION = (toolsJson) =>
+`You are a tool-calling agent. Read the user request and choose the single best tool from the list below.
+Respond with ONLY one JSON object — no prose, no markdown fences, nothing else:
+
+{"function": "<tool_name>", "arguments": {<argument fields>}}
+
+If no available tool fits the request, respond exactly with:
+{"function": null, "arguments": null}
+
+Available tools (JSON schema):
+${toolsJson}`;
+
+    /* ============================================================
+     *  State
+     * ============================================================ */
+    let selectedIds = new Set(JSON.parse(localStorage.getItem('slmSelected') || 'null') || ['nano', 'needle2', 'tf-smollm2-135m', 'tf-functiongemma-270m', 'tf-qwen3-0.6b']);
+    let sessions = {};      // modelId -> adapter handle
+    let runHistory = [];    // batches
+    let currentBatch = -1;
+    let stopped = false;
+    let currentCards = {};
+
+    /* ============================================================
+     *  Model picker UI
+     * ============================================================ */
+    function buildModelPicker() {
+      const groups = {};
+      MODELS.forEach(m => { (groups[m.engine] = groups[m.engine] || []).push(m); });
+      const host = $('#modelGroups');
+      host.innerHTML = '';
+      Object.entries(groups).forEach(([eng, models]) => {
+        const g = document.createElement('div');
+        g.className = 'engine-group';
+        const head = document.createElement('div');
+        head.className = 'eg-head';
+        head.innerHTML = `<span style="color:${ENGINES[eng].color}">■</span> ${ENGINES[eng].name}
+          <span class="eg-status" id="egStatus-${eng}"></span>
+          <button class="btn-small btn-secondary" id="selAll-${eng}">All</button>
+          <button class="btn-small btn-secondary" id="selNone-${eng}">None</button>`;
+        const grid = document.createElement('div');
+        grid.className = 'eg-models';
+        models.forEach(m => {
+          const l = document.createElement('label');
+          l.className = 'model-opt';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.checked = selectedIds.has(m.id);
+          cb.onchange = () => { cb.checked ? selectedIds.add(m.id) : selectedIds.delete(m.id); persistSelection(); };
+          l.appendChild(cb);
+          const span = document.createElement('span');
+          span.innerHTML = `<span class="m-label">${escHTML(m.label)}</span>
+            <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>`;
+          l.appendChild(span);
+          grid.appendChild(l);
+        });
+        g.appendChild(head); g.appendChild(grid);
+        host.appendChild(g);
+        $(`#selAll-${eng}`).onclick = () => { models.forEach(m => selectedIds.add(m.id)); persistSelection(); buildModelPicker(); };
+        $(`#selNone-${eng}`).onclick = () => { models.forEach(m => selectedIds.delete(m.id)); persistSelection(); buildModelPicker(); };
+      });
+    }
+    function persistSelection() {
+      localStorage.setItem('slmSelected', JSON.stringify([...selectedIds]));
+      updateRunButton();
+    }
+    function updateRunButton() {
+      $('#runBtn').disabled = ![...selectedIds].some(id => MODELS.some(m => m.id === id));
+    }
+
+    /* ============================================================
+     *  Engine availability
+     * ============================================================ */
+    function chip(id, text, cls) {
+      const el = $(`#chip-${id}`) || (() => { const c = document.createElement('span'); c.id = `chip-${id}`; c.className = 'chip'; $('#chips').appendChild(c); return c; })();
+      el.className = 'chip' + (cls ? ' ' + cls : '');
+      el.textContent = text;
+    }
+
+    async function getBuiltinAI() {
+      if (self.LanguageModel) return { name: 'LanguageModel', create: o => self.LanguageModel.create(o), getStatus: async () => (typeof self.LanguageModel.availability === 'function' ? await self.LanguageModel.availability() : (await self.LanguageModel.capabilities()).available) };
+      if (self.ai && self.ai.languageModel) return { name: 'ai.languageModel', create: o => self.ai.languageModel.create(o), getStatus: async () => (typeof self.ai.languageModel.availability === 'function' ? await self.ai.languageModel.availability() : (await self.ai.languageModel.capabilities()).available) };
+      return null;
+    }
+
+    async function init() {
+      // Built-in AI
+      try {
+        const ai = await getBuiltinAI();
+        if (!ai) { chip('builtin', 'Built-in AI: not available', 'err'); }
+        else {
+          let st = await ai.getStatus();
+          if (typeof st !== 'string') st = st.available || st;
+          chip('builtin', `Built-in AI: ${st}`, st === 'available' || st === 'readily' ? 'ok' : 'warn');
+        }
+      } catch (e) { chip('builtin', 'Built-in AI: error', 'err'); }
+
+      // Needle 2 (vendored)
+      try {
+        const r = await fetch(new URL('vendor/needle/needle.wasm', location.href), { method: 'HEAD' });
+        chip('needle', r.ok ? 'Needle 2: vendored ✓' : 'Needle 2: missing', r.ok ? 'ok' : 'err');
+      } catch { chip('needle', 'Needle 2: unreachable', 'err'); }
+
+      // WebGPU (used by WebLLM and optional for Transformers.js)
+      chip('webgpu', navigator.gpu ? 'WebGPU: available' : 'WebGPU: unavailable (WASM fallback)', navigator.gpu ? 'ok' : 'warn');
+
+      // Transformers.js / WebLLM CDNs (loaded lazily on first use)
+      chip('tfjs', 'Transformers.js: on-demand CDN', 'ok');
+      chip('webllm', 'WebLLM: on-demand CDN', 'ok');
+
+      const msg = $('#statusMsg');
+      msg.textContent = 'Ready. Models run 100% locally in your browser (first use downloads weights from Hugging Face, then caches them).';
+      $('#status').className = 'status-ok';
+    }
+
+    /* ============================================================
+     *  Adapters
+     * ============================================================ */
+    function resetSessions(excludeRetain) {
+      const retain = $('#retainHistory').checked;
+      Object.entries(sessions).forEach(([id, s]) => {
+        if (retain && excludeRetain && excludeRetain.has(id)) return;
+        try { s.reset && s.reset(); } catch (e) {}
+        if (s.destroy) { try { s.destroy(); } catch (e) {} }
+        delete sessions[id];
+      });
+    }
+
+    // ---- Chrome Built-in ----
+    async function adapterBuiltin(model, card) {
+      let s = sessions[model.id];
+      if (s) return s;
+      const ai = await getBuiltinAI();
+      if (!ai) throw new Error('Built-in AI API not available in this browser.');
+      const sys = $('#sysPrompt').value.trim();
+      const session = await ai.create(sys ? { systemPrompt: sys, initialPrompts: [{ role: 'system', content: sys }] } : {});
+      s = sessions[model.id] = {
+        session,
+        reset() { try { session.destroy(); } catch (e) {} delete sessions[model.id]; },
+        destroy() { try { session.destroy(); } catch (e) {} },
+      };
+      return s;
+    }
+
+    // ---- Transformers.js ----
+    let tfLibPromise = null;
+    function getTf() {
+      if (!tfLibPromise) {
+        tfLibPromise = import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js').then(tf => {
+          tf.env.allowLocalModels = false;
+          return tf;
+        });
+      }
+      return tfLibPromise;
+    }
+
+    async function adapterTransformers(model, card) {
+      let s = sessions[model.id];
+      if (s) return s;
+      const tf = await getTf();
+      const progressCb = data => {
+        if (!card) return;
+        if (data.status === 'progress') card.progress(data.progress, (data.file || '') + ' ' + (data.loaded ? Math.round(data.loaded / 1048576) + 'MB' : ''));
+        else if (data.status === 'initiate') card.setStatus('Downloading ' + (data.file || '') + '…');
+        else if (data.status === 'done') card.setStatus('Downloaded ✓');
+      };
+      const useWebGPU = !!navigator.gpu && model.params !== '135M' && model.params !== '360M';
+      const device = useWebGPU ? 'webgpu' : 'wasm';
+      const dtype = device === 'webgpu' ? 'q4' : 'q8';
+      card.setStatus(`Loading (${device}/${dtype})…`);
+
+      let tokenizer = null, lm = null, lastErr = null;
+      const attempts = [
+        { device, dtype },
+        { device: 'wasm', dtype: 'q8' },
+        {},
+      ];
+      for (const a of attempts) {
+        try {
+          tokenizer = await tf.AutoTokenizer.from_pretrained(model.repo, { progress_callback: progressCb });
+          lm = await tf.AutoModelForCausalLM.from_pretrained(model.repo, {
+            dtype: a.dtype, device: a.device, progress_callback: progressCb,
+          });
+          break;
+        } catch (e) { lastErr = e; }
+      }
+      if (!lm) throw lastErr || new Error('Failed to load model');
+
+      s = sessions[model.id] = {
+        tf, tokenizer, lm,
+        async generate(messages, opts) {
+          let inputs;
+          if (opts.tools) {
+            inputs = tokenizer.apply_chat_template(messages, { tools: opts.tools, add_generation_prompt: true, tokenize: true, return_dict: true });
+          } else {
+            inputs = tokenizer.apply_chat_template(messages, { add_generation_prompt: true, tokenize: true, return_dict: true });
+          }
+          const maxNew = opts.maxTokens;
+          let streamed = '';
+          const streamer = new tf.TextStreamer(tokenizer, {
+            skip_prompt: true,
+            callback_function: text => { streamed += text; opts.onToken && opts.onToken(text); },
+          });
+          let out;
+          try {
+            // v4 generate() takes a single options object (inputs + generation config + streamer)
+            out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false, repetition_penalty: 1.05, streamer });
+          } catch (e) {
+            // Streaming unsupported for this model — fall back to a plain generate
+            out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false, repetition_penalty: 1.05 });
+          }
+          let genTokens = 0;
+          try {
+            const total = out.dims ? out.dims[out.dims.length - 1] : (out.input_ids ? out.input_ids.dims[out.input_ids.dims.length - 1] : 0);
+            const promptLen = inputs.input_ids ? inputs.input_ids.dims[inputs.input_ids.dims.length - 1] : 0;
+            genTokens = Math.max(0, total - promptLen);
+          } catch (e) {}
+          const text = streamed || (typeof out === 'string' ? out : '');
+          return { text, tokens: genTokens || Math.round(text.length / 4) };
+        },
+        reset() { delete sessions[model.id]; },
+        destroy() {},
+      };
+      return s;
+    }
+
+    // ---- WebLLM ----
+    let wlLibPromise = null;
+    function getWl() {
+      if (!wlLibPromise) {
+        wlLibPromise = import('https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/lib/index.js');
+      }
+      return wlLibPromise;
+    }
+
+    async function adapterWebLLM(model, card) {
+      let s = sessions[model.id];
+      if (s) return s;
+      if (!navigator.gpu) throw new Error('WebGPU not available — pick the Transformers.js version of this model instead.');
+      const { CreateMLCEngine } = await getWl();
+      card.setStatus('Loading WebGPU engine…');
+      const engine = await CreateMLCEngine(model.wlId, {
+        initProgressCallback: p => card.progress(Math.round(p.progress * 100), p.text),
+      });
+      s = sessions[model.id] = {
+        engine,
+        async chat(messages, opts) {
+          let text = '';
+          const chunks = await engine.chat.completions.create({
+            messages,
+            stream: true,
+            max_tokens: opts.maxTokens,
+          });
+          for await (const c of chunks) {
+            if (stopped) { try { engine.interruptGenerate(); } catch (e) {} throw new Error('stopped'); }
+            const delta = c && c.choices && c.choices[0] && c.choices[0].delta && c.choices[0].delta.content;
+            if (delta) { text += delta; opts.onToken && opts.onToken(delta); }
+          }
+          return { text, tokens: Math.round(text.length / 4) };
+        },
+        reset() { delete sessions[model.id]; },
+        destroy() { try { engine.unload(); } catch (e) {} },
+      };
+      return s;
+    }
+
+    // ---- Needle 2 (vendored WASM) ----
+    const utf8enc = new TextEncoder();
+    const utf8dec = new TextDecoder('utf-8');
+    function allocStr(Module, str) {
+      const bytes = utf8enc.encode(str);
+      const p = Module._malloc(bytes.length + 1);
+      Module.HEAPU8.set(bytes, p);
+      Module.HEAPU8[p + bytes.length] = 0;
+      return p;
+    }
+    function readStr(Module, ptr) {
+      const heap = Module.HEAPU8;
+      let end = ptr;
+      while (end < heap.length && heap[end] !== 0) end++;
+      return utf8dec.decode(heap.subarray(ptr, end));
+    }
+
+    let needleModule = null;
+    async function loadNeedleModule(card) {
+      if (needleModule) return needleModule;
+      card.setStatus('Loading Needle 2 engine…');
+      if (typeof createNeedle !== 'function') throw new Error('vendor/needle/needle.js not loaded (missing script tag).');
+      const Module = await createNeedle({
+        locateFile: p => new URL('vendor/needle/' + p, location.href).href,
+      });
+      const resp = await fetch(new URL('vendor/needle/needle2.cact', location.href));
+      if (!resp.ok) throw new Error('Failed to fetch needle2.cact weights');
+      const weights = new Uint8Array(await resp.arrayBuffer());
+      const ptr = Module._malloc(weights.length);
+      Module.HEAPU8.set(weights, ptr);
+      // needle_load's size param is `unsigned long long` — pass a BigInt.
+      const loadRes = Module._needle_load(ptr, BigInt(weights.length));
+      Module._free(ptr);
+      if (loadRes != 0) throw new Error(`needle_load failed (code ${loadRes})`);
+      needleModule = Module;
+      return Module;
+    }
+
+    async function adapterNeedle(model, card) {
+      let s = sessions[model.id];
+      if (s) return s;
+      const Module = await loadNeedleModule(card);
+      s = sessions[model.id] = {
+        Module,
+        lastSys: null, lastTools: null,
+        run(prompt, sysPrompt, toolsJson, maxTokens) {
+          // (Re)init only when the system prompt or tool set changes — keeps
+          // conversation state across turns when Retain History is on.
+          if (s.lastTools !== toolsJson || s.lastSys !== sysPrompt) {
+            const sysPtr = allocStr(Module, sysPrompt || '');
+            const toolsPtr = allocStr(Module, toolsJson || '[]');
+            const initRes = Module._needle_init(sysPtr, toolsPtr, 0);
+            Module._free(sysPtr); Module._free(toolsPtr);
+            if (initRes < 0) throw new Error(`needle_init failed (code ${initRes})`);
+            s.lastSys = sysPrompt; s.lastTools = toolsJson;
+          }
+
+          const inPtr = allocStr(Module, prompt);
+          const outCap = 65536;
+          const outPtr = Module._malloc(outCap);
+          const res = Module._needle_complete(inPtr, maxTokens, outPtr, outCap);
+          const json = readStr(Module, outPtr);
+          Module._free(inPtr); Module._free(outPtr);
+          if (res < 0) throw new Error(`needle_complete failed (code ${res})`);
+          if (!json) throw new Error(`needle_complete returned empty (code ${res})`);
+
+          let parsed = null;
+          try { parsed = JSON.parse(json); } catch (e) {}
+          const pretty = parsed ? JSON.stringify(parsed, null, 2) : json;
+          return { text: pretty, extra: parsed || {} };
+        },
+        reset() { Module._needle_reset(); s.lastTools = null; s.lastSys = null; },
+        destroy() {},
+      };
+      return s;
+    }
+
+    /* ============================================================
+     *  Prompt assembly
+     * ============================================================ */
+    function currentMode() { return $('#mode').value; }
+    function getToolsList() {
+      const raw = $('#toolsJson').value.trim();
+      const list = JSON.parse(raw);
+      if (!Array.isArray(list)) throw new Error('Tools must be a JSON array of function schemas.');
+      return list;
+    }
+
+    function buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList) {
+      const mode = currentMode();
+      const nativeTools = mode === 'tool' && (model.id === 'needle2' || model.id === 'tf-functiongemma-270m');
+
+      if (model.id === 'tf-functiongemma-270m') {
+        if (mode === 'tool') {
+          return { messages: [
+            { role: 'developer', content: sysPrompt || 'You are a model that can do function calling with the following functions' },
+            { role: 'user', content: userPrompt },
+          ], tools: toolsList };
+        }
+        return { messages: [
+          { role: 'developer', content: sysPrompt || 'You are a helpful assistant.' },
+          { role: 'user', content: userPrompt },
+        ], tools: null };
+      }
+
+      let system = sysPrompt || 'You are a helpful assistant.';
+      let tools = null;
+      if (mode === 'tool') {
+        system = (sysPrompt ? sysPrompt + '\n\n' : '') + TOOL_SYSTEM_INSTRUCTION(toolsJson);
+      }
+      return { messages: [{ role: 'system', content: system }, { role: 'user', content: userPrompt }], tools };
+    }
+
+    /* ============================================================
+     *  Execution
+     * ============================================================ */
+    function cardUI(model) {
+      const card = document.createElement('div');
+      card.className = 'mcard';
+      card.id = 'card-' + model.id;
+      card.innerHTML = `
+        <div class="mc-head">
+          <div class="mc-title">
+            <span class="mc-name">${escHTML(model.label)}</span>
+            <span class="badge">${escHTML(model.params)}</span>
+            <span class="badge" style="color:${ENGINES[model.engine].color};border-color:${ENGINES[model.engine].color}66">${ENGINES[model.engine].name}</span>
+            ${model.id === 'needle2' ? '<span class="badge">native tools</span>' : ''}
+          </div>
+          <div class="mc-sub">${escHTML(model.note || '')} · ${escHTML(model.size)} download</div>
+          <div class="mc-status"><span class="mc-state">waiting</span><span class="mc-progress"><div></div></span></div>
+        </div>
+        <div class="mc-body"><span class="empty-note">Waiting…</span></div>
+        <div class="mc-foot"></div>`;
+      const api = {
+        el: card,
+        stateEl: card.querySelector('.mc-state'),
+        body: card.querySelector('.mc-body'),
+        foot: card.querySelector('.mc-foot'),
+        bar: card.querySelector('.mc-progress > div'),
+        setState(cls, text) {
+          card.className = 'mcard state-' + cls;
+          this.stateEl.innerHTML = text;
+        },
+        setStatus(text) { this.stateEl.innerHTML = (this.stateEl.innerHTML === 'running' ? '' : '') + escHTML(text); },
+        progress(pct, label) {
+          this.bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+          if (label) this.stateEl.innerHTML = escHTML(label);
+        },
+        stream(text) {
+          const pre = this.body.querySelector('pre') || (() => { const p = document.createElement('pre'); this.body.innerHTML = ''; this.body.appendChild(p); return p; })();
+          pre.textContent += text;
+          this.body.scrollTop = this.body.scrollHeight;
+        },
+        render(text) {
+          this.body.innerHTML = '';
+          const pre = document.createElement('pre');
+          pre.textContent = text;
+          this.body.appendChild(pre);
+        },
+        metrics(html) { this.foot.innerHTML = html; },
+      };
+      return api;
+    }
+
+    async function runModel(model, card) {
+      const iterations = parseInt($('#iterations').value, 10) || 1;
+      const maxTokens = parseInt($('#maxTokens').value, 10) || 256;
+      const retain = $('#retainHistory').checked;
+      const sysPrompt = $('#sysPrompt').value.trim();
+      const rawPrompt = $('#userPrompt').value.trim();
+      const file = $('#fileInput').files[0];
+      const fileText = file ? `\n\n--- [File: ${file.name}] ---\n${await file.text()}\n--- [End File] ---\n` : '';
+      const userPrompt = rawPrompt + fileText;
+      const mode = currentMode();
+
+      let toolsJson = '[]', toolsList = [];
+      if (mode === 'tool') {
+        toolsList = getToolsList();
+        toolsJson = JSON.stringify(toolsList, null, 2);
+      }
+
+      if (!userPrompt.trim()) throw new Error('Prompt cannot be empty.');
+
+      const result = { modelId: model.id, label: model.label, engine: model.engine, params: model.params,
+                       outputs: [], durations: [], tokens: [], status: 'ok', error: null };
+
+      try {
+        card.setState('running', '<span class="spinner"></span> loading…');
+        const modeText = mode === 'tool' ? 'tool' : 'chat';
+        let adapter;
+        if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
+        else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
+        else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
+        else if (model.engine === 'needle') adapter = await adapterNeedle(model, card);
+        else throw new Error('Unknown engine: ' + model.engine);
+
+        for (let i = 0; i < iterations; i++) {
+          if (stopped) throw new Error('stopped');
+          card.setState('running', `⚡ iteration ${i + 1}/${iterations}${retain ? ' (context retained)' : ''}`);
+          card.bar.style.width = '0%';
+          const start = performance.now();
+          let text = '', tokens = 0, extra = null;
+
+          if (model.engine === 'needle') {
+            const r = adapter.run(userPrompt, sysPrompt, toolsJson, maxTokens);
+            text = r.text; extra = r.extra;
+            card.stream(text);
+            tokens = Math.round(text.length / 4);
+          } else if (model.engine === 'builtin') {
+            const out = await adapter.session.prompt(userPrompt);
+            text = out;
+            card.stream(text);
+            tokens = Math.round(text.length / 4);
+          } else if (model.engine === 'transformers') {
+            const { messages, tools } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
+            const r = await adapter.generate(messages, { tools, maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); } });
+            text = r.text; tokens = r.tokens;
+            if (!text) card.stream('(empty output)');
+          } else if (model.engine === 'webllm') {
+            const { messages } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
+            const r = await adapter.chat(messages, { maxTokens, onToken: t => card.stream(t) });
+            text = r.text; tokens = r.tokens;
+            if (!text) card.stream('(empty output)');
+          }
+
+          const ms = (performance.now() - start) / 1000;
+          result.outputs.push(text);
+          result.durations.push(ms);
+          result.tokens.push(tokens);
+
+          const prev = previousOutputFor(model.id, currentBatchEntry);
+          const diff = prev !== undefined && prev !== null ? diffPercent(prev, text) : null;
+          const tps = tokens / Math.max(ms, 0.001);
+          card.metrics(`
+            <span class="metric">⏱️ <b>${fmt(ms)}s</b></span>
+            <span class="metric">chars <b>${text.length}</b></span>
+            <span class="metric">~tok <b>${tokens}</b></span>
+            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
+            ${diff !== null ? `<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${diff}%</b></span>` : ''}
+            ${extra && extra.confidence != null ? `<span class="metric">confidence <b>${(extra.confidence * 100).toFixed(0)}%</b></span>` : ''}
+            ${extra && extra.prefill_tps ? `<span class="metric">prefill <b>${extra.prefill_tps.toFixed(0)}</b> tok/s</span>` : ''}
+            ${extra && extra.decode_tps ? `<span class="metric">decode <b>${extra.decode_tps.toFixed(0)}</b> tok/s</span>` : ''}
+          `);
+          if (diff !== null) {
+            const badge = card.foot.querySelector('.diff-badge');
+            badge.onclick = () => {
+              const showing = card.body.dataset.mode === 'diff';
+              if (showing) { card.render(text); card.body.dataset.mode = 'text'; }
+              else { card.body.innerHTML = `<pre>${diffHTML(prev, text)}</pre>`; card.body.dataset.mode = 'diff'; }
+            };
+          }
+        }
+
+        card.setState('done', '✅ done');
+        if (!retain) { try { adapter.reset(); } catch (e) {} }
+      } catch (err) {
+        result.status = err.message === 'stopped' ? 'stopped' : 'error';
+        result.error = err.message;
+        card.setState(err.message === 'stopped' ? 'warn' : 'error', err.message === 'stopped' ? '⏹ stopped' : '❌ ' + escHTML(err.message));
+        card.metrics('<span class="metric" style="color:var(--danger)">' + escHTML(err.message) + '</span>');
+        throw err;
+      }
+      return result;
+    }
+
+    function previousOutputFor(modelId, excludeBatch) {
+      for (const batch of runHistory) {
+        if (batch === excludeBatch) continue;
+        const m = batch.models.find(x => x.modelId === modelId);
+        if (m && m.outputs && m.outputs.length) return m.outputs[m.outputs.length - 1];
+      }
+      return null;
+    }
+
+    function diffPercent(a, b) {
+      try {
+        const d = Diff.diffWords(a, b);
+        let added = 0, removed = 0;
+        d.forEach(p => { if (p.added) added += p.value.length; else if (p.removed) removed += p.value.length; });
+        return Math.min(100, Math.round(((added + removed) / Math.max(a.length, 1)) * 100));
+      } catch (e) { return null; }
+    }
+    function diffHTML(a, b) {
+      const d = Diff.diffWords(a, b);
+      return d.map(p => {
+        if (p.added) return `<ins>${escHTML(p.value)}</ins>`;
+        if (p.removed) return `<del>${escHTML(p.value)}</del>`;
+        return escHTML(p.value);
+      }).join('');
+    }
+
+    /* ============================================================
+     *  Run orchestration
+     * ============================================================ */
+    async function runBench() {
+      const selected = MODELS.filter(m => selectedIds.has(m.id));
+      if (!selected.length) { alert('Select at least one model.'); return; }
+
+      let toolsJsonForPrint = '—';
+      try {
+        if (currentMode() === 'tool') { getToolsList(); toolsJsonForPrint = $('#toolsJson').value; }
+      } catch (e) { alert('Tools JSON error: ' + e.message); return; }
+
+      stopped = false;
+      currentBatchEntry = { models: selected.map(m => ({ modelId: m.id })) };
+      $('#runBtn').disabled = true;
+      $('#stopBtn').disabled = false;
+      $('#benchStatus').textContent = 'Running ' + selected.length + ' model(s) side-by-side…';
+
+      // Fresh grid
+      const grid = $('#resultsGrid');
+      grid.innerHTML = '';
+      currentCards = {};
+      selected.forEach(m => {
+        const card = cardUI(m);
+        grid.appendChild(card.el);
+        currentCards[m.id] = card;
+      });
+
+      if (!$('#retainHistory').checked) resetSessions();
+
+      const tasks = selected.map(m =>
+        runModel(m, currentCards[m.id]).then(res => ({ m, res })).catch(err => ({ m, res: null, err }))
+      );
+      const settled = await Promise.allSettled(tasks);
+      const results = settled.map(s => s.value).filter(v => v && v.res);
+
+      $('#stopBtn').disabled = true;
+      $('#runBtn').disabled = false;
+      $('#benchStatus').textContent = '';
+
+      // Save history (one batch entry)
+      const entry = {
+        datetime: new Date().toLocaleString(),
+        mode: currentMode(),
+        sysPrompt: $('#sysPrompt').value.trim(),
+        userPrompt: $('#userPrompt').value.trim(),
+        toolsJson: currentMode() === 'tool' ? $('#toolsJson').value : '',
+        maxTokens: parseInt($('#maxTokens').value, 10) || 256,
+        iterations: parseInt($('#iterations').value, 10) || 1,
+        retainHistory: $('#retainHistory').checked,
+        models: results.map(r => r.res),
+      };
+      currentBatchEntry = null;
+      runHistory.unshift(entry);
+      currentBatch = 0;
+      try { localStorage.setItem('slmBenchHistory', JSON.stringify(runHistory.slice(0, 200))); } catch (e) { runHistory.shift(); }
+      renderHistory();
+      renderSummary(entry);
+    }
+
+    // Kept up to date during a run so per-iteration diffs compare against
+    // the previous batch, not the batch currently being recorded.
+    let currentBatchEntry = null;
+
+    function renderSummary(entry) {
+      const tbody = $('#summaryTable tbody');
+      if (!entry || !entry.models.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr>'; return; }
+      const rows = entry.models.map(m => {
+        const last = m.outputs.length - 1;
+        const dur = m.durations[last] || 0;
+        const toks = m.tokens[last] || 0;
+        const text = m.outputs[last] || '';
+        const tps = toks / Math.max(dur, 0.001);
+        return { m, dur, toks, text, tps };
+      }).sort((a, b) => a.dur - b.dur);
+      const fastest = rows[0];
+      tbody.innerHTML = rows.map(r => {
+        const prev = previousOutputFor(r.m.modelId, entry);
+        const diff = prev !== undefined && prev !== null && r.m.outputs.length ? diffPercent(prev, r.m.outputs[r.m.outputs.length - 1]) : null;
+        return `<tr>
+          <td><b>${escHTML(r.m.label)}</b></td>
+          <td>${ENGINES[r.m.engine].name}</td>
+          <td>${escHTML(r.m.params)}</td>
+          <td>${r.m.status === 'ok' ? '✅' : '❌ ' + escHTML(r.m.error || r.m.status)}</td>
+          <td>${r === fastest ? '🏆 ' : ''}${fmt(r.dur)}</td>
+          <td>${r.text.length}</td>
+          <td>${r.toks}</td>
+          <td>${r.tps.toFixed(1)}</td>
+          <td>${diff !== null ? '<span class="diff-badge">' + diff + '%</span>' : '-'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    /* ============================================================
+     *  History
+     * ============================================================ */
+    function loadHistory() {
+      try { runHistory = JSON.parse(localStorage.getItem('slmBenchHistory') || '[]'); } catch (e) { runHistory = []; }
+      if (runHistory.length) currentBatch = 0;
+      renderHistory();
+      if (runHistory.length) renderSummary(runHistory[0]);
+    }
+
+    function renderHistory() {
+      const tbody = $('#historyBody');
+      tbody.innerHTML = runHistory.length ? '' : '<tr><td colspan="6" style="text-align:center;">No runs recorded yet.</td></tr>';
+
+      if (runHistory.length) {
+        const e = runHistory[0];
+        $('#printMode').textContent = e.mode === 'tool' ? 'Tool Calling & Structured Output' : 'Chat / Instruction Following';
+        $('#printSys').textContent = e.sysPrompt || 'None';
+        $('#printUser').textContent = e.userPrompt || 'None';
+        $('#printTools').textContent = e.toolsJson || 'None';
+      }
+
+      runHistory.forEach((batch, i) => {
+        const tr = document.createElement('tr');
+        tr.className = i === currentBatch ? 'active-row' : '';
+        tr.onclick = () => { currentBatch = i; renderHistory(); renderBatchGrid(batch); };
+
+        const avgDur = batch.models.length ? (batch.models.reduce((a, m) => a + (m.durations[m.durations.length - 1] || 0), 0) / batch.models.length) : 0;
+        const diffs = batch.models.map(m => {
+          const prev = previousOutputFor(m.modelId, batch);
+          return (prev !== undefined && prev !== null && m.outputs.length) ? diffPercent(prev, m.outputs[m.outputs.length - 1]) : null;
+        }).filter(d => d !== null);
+        const avgDiff = diffs.length ? (diffs.reduce((a, b) => a + b, 0) / diffs.length).toFixed(0) : '-';
+
+        tr.innerHTML = `
+          <td>${batch.datetime}</td>
+          <td>${batch.mode === 'tool' ? '🛠️ Tool' : '💬 Chat'}</td>
+          <td>${batch.models.length}</td>
+          <td>${fmt(avgDur)}</td>
+          <td>${avgDiff}</td>
+          <td class="cell-trim" title="${escHTML(batch.userPrompt)}">${escHTML(batch.userPrompt)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderBatchGrid(batch) {
+      const grid = $('#resultsGrid');
+      grid.innerHTML = '';
+      batch.models.forEach(m => {
+        const card = cardUI({ id: m.modelId, label: m.label, engine: m.engine, params: m.params, note: '', size: '' });
+        grid.appendChild(card.el);
+        const last = m.outputs.length - 1;
+        if (m.status === 'ok' && m.outputs[last]) {
+          card.render(m.outputs[last]);
+          card.setState('done', `✅ ${batch.iterations > 1 ? batch.iterations + ' iterations · ' : ''}${fmt(m.durations[last] || 0)}s`);
+          const tps = (m.tokens[last] || 0) / Math.max(m.durations[last] || 0, 0.001);
+          card.metrics(`<span class="metric">⏱️ <b>${fmt(m.durations[last] || 0)}s</b></span>
+            <span class="metric">chars <b>${(m.outputs[last] || '').length}</b></span>
+            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>`);
+        } else {
+          card.setState('error', '❌ ' + escHTML(m.error || m.status));
+          card.render(m.outputs[last] || '');
+        }
+      });
+    }
+
+    /* ============================================================
+     *  Exports
+     * ============================================================ */
+    $('#exportCsvBtn').onclick = () => {
+      if (!runHistory.length) return alert('No data to export.');
+      const esc = str => `"${(str || '').toString().replace(/"/g, '""')}"`;
+      const latest = runHistory[0];
+      const header = `Mode,${esc(latest.mode)}\nSystem Prompt,${esc(latest.sysPrompt)}\nUser Prompt,${esc(latest.userPrompt)}\nTools,${esc(latest.toolsJson)}\n\n`;
+      const cols = 'Date/Time,Model,Engine,Params,Iteration,Time (s),~Tokens,~tok/s,Output\n';
+      const rows = runHistory.flatMap(batch =>
+        batch.models.flatMap(m =>
+          m.outputs.map((out, i) =>
+            [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1,
+             (m.durations[i] || 0).toFixed(2), m.tokens[i] || 0,
+             ((m.tokens[i] || 0) / Math.max(m.durations[i] || 0, 0.001)).toFixed(1), out].map(esc).join(','))
+        )
+      ).join('\n');
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(new Blob([header + cols + rows], { type: 'text/csv;charset=utf-8;' }));
+      link.download = `slm-bench-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+    };
+
+    $('#exportPdfBtn').onclick = () => { if (!runHistory.length) return alert('No data to print.'); window.print(); };
+    $('#clearHistoryBtn').onclick = () => {
+      if (confirm('Clear all local history?')) {
+        localStorage.removeItem('slmBenchHistory');
+        runHistory = []; currentBatch = -1;
+        renderHistory();
+        renderSummary(null);
+        $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Select models above and press <b>Run Bench</b>.</p>';
+      }
+    };
+
+    /* ============================================================
+     *  Controls
+     * ============================================================ */
+    $('#mode').onchange = () => { $('#toolPanel').style.display = currentMode() === 'tool' ? 'block' : 'none'; };
+    $('#clearBtn').onclick = () => { $('#userPrompt').value = ''; $('#fileInput').value = ''; $('#toolsJson').value = JSON.stringify(DEFAULT_TOOLS, null, 2); };
+    $('#runBtn').onclick = runBench;
+    $('#stopBtn').onclick = () => {
+      stopped = true;
+      $('#stopBtn').disabled = true;
+      $('#benchStatus').textContent = 'Stopping…';
+    };
+
+    // defaults
+    $('#toolsJson').value = JSON.stringify(DEFAULT_TOOLS, null, 2);
+
+    buildModelPicker();
+    loadHistory();
+    init();
+  </script>
+</body>
+</html>
