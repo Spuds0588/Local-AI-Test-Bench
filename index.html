@@ -414,7 +414,10 @@ ${toolsJson}`;
     /* ============================================================
      *  State & prefs
      * ============================================================ */
-    let selectedIds = new Set(JSON.parse(localStorage.getItem('slmSelected') || 'null') || ['nano', 'needle2']);
+    let selectedIds;
+    try {
+      selectedIds = new Set(JSON.parse(localStorage.getItem('slmSelected') || 'null') || ['nano', 'needle2']);
+    } catch (e) { selectedIds = new Set(['nano', 'needle2']); }
     let sessions = {};      // modelId -> adapter handle
     let runHistory = [];    // batches
     let currentBatch = -1;
@@ -424,8 +427,22 @@ ${toolsJson}`;
     let currentBatchEntry = null;
 
     const DEFAULT_PREFS = { hidden: [], downloaded: {}, showNotReady: false };
-    let prefs = { ...DEFAULT_PREFS, ...(JSON.parse(localStorage.getItem('slmPrefs2') || 'null') || {}) };
-    function savePrefs() { localStorage.setItem('slmPrefs2', JSON.stringify(prefs)); }
+    const PREFS_KEY = 'slmPrefs2';
+    function loadPrefs() {
+      let raw = {};
+      try { raw = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null') || {}; } catch (e) { raw = {}; }
+      // Schema validation so a corrupt/partial write can never brick readiness.
+      return {
+        hidden: Array.isArray(raw.hidden) ? raw.hidden.filter(x => typeof x === 'string') : [],
+        downloaded: (raw.downloaded && typeof raw.downloaded === 'object' && !Array.isArray(raw.downloaded)) ? raw.downloaded : {},
+        showNotReady: !!raw.showNotReady,
+      };
+    }
+    let prefs = loadPrefs();
+    function savePrefs() {
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); }
+      catch (e) { console.warn('Could not persist prefs:', e); }
+    }
 
     let builtinStatus = 'missing';   // 'ready' | 'missing' | 'downloading' | 'error'
     let webgpuAvailable = !!navigator.gpu;
@@ -454,6 +471,55 @@ ${toolsJson}`;
     }
     function visibleModel(m) {
       return !prefs.hidden.includes(m.id);
+    }
+
+    /* Reconcile the localStorage readiness flag against what is *actually*
+       cached in the browser. Transformers.js stores weights in the Cache
+       Storage bucket "transformers-cache" keyed by HuggingFace resolve URLs;
+       WebLLM stores them under "webllm/model" (tensor shards) and
+       "webllm/wasm" (the model library). This makes readiness survive a
+       refresh/restart that happened mid-download or before savePrefs(). */
+    async function reconcileCacheReadiness() {
+      if (!('caches' in window)) return false;
+      let changed = false;
+      const markReady = id => {
+        if (!prefs.downloaded[id]) { prefs.downloaded[id] = true; changed = true; }
+        // The cache proves weights are present, so drop any stale
+        // "interrupted" marker that a prior refresh may have left behind.
+        if (dlState[id] && dlState[id].interrupted) {
+          delete dlState[id];
+          persistDlState();
+        }
+      };
+      try {
+        // --- Transformers.js ---
+        const tfCache = await caches.open('transformers-cache');
+        const tfUrls = new Set((await tfCache.keys()).map(r => r.url));
+        for (const m of MODELS) {
+          if (m.engine !== 'transformers') continue;
+          // The big weight file is the decisive "downloaded" marker.
+          const base = `https://huggingface.co/${m.repo}/resolve/main/`;
+          const hasWeights = [...tfUrls].some(u => u.startsWith(base + 'onnx/model'));
+          if (hasWeights) markReady(m.id);
+        }
+      } catch (e) { /* no-op: cache unavailable */ }
+      try {
+        // --- WebLLM ---
+        const wlModel = await caches.open('webllm/model');
+        const wlWasm = await caches.open('webllm/wasm');
+        const modelUrls = new Set((await wlModel.keys()).map(r => r.url));
+        const wasmUrls = new Set((await wlWasm.keys()).map(r => r.url));
+        for (const m of MODELS) {
+          if (m.engine !== 'webllm') continue;
+          // Model shards live under huggingface.co/mlc-ai/<wlId>/resolve/main/…
+          const base = `https://huggingface.co/mlc-ai/${m.wlId}/resolve/main/`;
+          const hasShards = [...modelUrls].some(u => u.startsWith(base));
+          const hasLib = [...wasmUrls].some(u => u.includes(m.wlId));
+          if (hasShards && hasLib) markReady(m.id);
+        }
+      } catch (e) { /* no-op */ }
+      if (changed) { savePrefs(); buildModelPicker(); renderSettings(); }
+      return changed;
     }
 
     /* ============================================================
@@ -573,8 +639,9 @@ ${toolsJson}`;
         const btn = dl.querySelector('.dl-go'), barDiv = dl.querySelector('.dl-progress > div'), lbl = dl.querySelector('.dl-label');
         registerPaint(m.id, s => {
           const busy = !!downloading[m.id];
+          const interrupted = !!(s && s.interrupted && !busy);
           btn.disabled = busy || (s && s.done && !s.error);
-          btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Ready' : '⬇ Download');
+          btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Ready' : (interrupted ? '▶ Resume' : '⬇ Download'));
           barDiv.style.width = (s && s.pct ? s.pct : 0) + '%';
           lbl.textContent = s ? s.label : '';
           lbl.style.color = s && s.error ? 'var(--danger)' : '';
@@ -671,8 +738,9 @@ ${toolsJson}`;
           const barDiv = bar.querySelector('div');
           registerPaint(m.id, s => {
             const busy = !!downloading[m.id];
+            const interrupted = !!(s && s.interrupted && !busy);
             btn.disabled = busy || (s && s.done && !s.error);
-            btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Downloaded' : '⬇ Download');
+            btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Downloaded' : (interrupted ? '▶ Resume' : '⬇ Download'));
             barDiv.style.width = (s && s.pct ? s.pct : 0) + '%';
             status.innerHTML = busy
               ? `<span class="badge warn">${s && s.label ? escHTML(s.label) : 'downloading…'}</span>`
@@ -680,7 +748,7 @@ ${toolsJson}`;
                   ? '<span class="badge ok">ready ✓</span>'
                   : (s && s.error
                       ? `<span class="badge err" style="color:var(--danger)">❌ failed</span>`
-                      : '<span class="badge warn">not downloaded</span>'));
+                      : (interrupted ? '<span class="badge warn">interrupted — resume</span>' : '<span class="badge warn">not downloaded</span>')));
           });
           btn.onclick = () => startDownload(m.id, () => renderSettings());
           paintDl(m.id);
@@ -697,9 +765,37 @@ ${toolsJson}`;
      *  per-model paint functions registered by whatever UI is visible,
      *  so progress survives re-renders of the picker / settings.
      * ============================================================ */
-    const dlState = {};   // modelId -> { pct, label, done, error }
+    const dlState = {};   // modelId -> { pct, label, done, error, interrupted }
     const dlPaints = {};  // modelId -> paint fn
-    function setDl(id, patch) { dlState[id] = { ...(dlState[id] || {}), ...patch }; }
+    const DL_STATE_KEY = 'slmDlState';
+    let dlSaveTimer = null;
+    function persistDlState() {
+      // Keep the ledger small: only entries with useful info.
+      const snap = {};
+      for (const [id, s] of Object.entries(dlState)) {
+        if (!s || s.done && !s.error) continue;
+        snap[id] = { pct: s.pct || 0, label: s.label || '', done: !!s.done, error: s.error || null, interrupted: !!s.interrupted };
+      }
+      try { localStorage.setItem(DL_STATE_KEY, JSON.stringify(snap)); } catch (e) {}
+    }
+    function restoreDlState() {
+      let snap = {};
+      try { snap = JSON.parse(localStorage.getItem(DL_STATE_KEY) || '{}') || {}; } catch (e) { snap = {}; }
+      for (const [id, s] of Object.entries(snap)) {
+        if (!s || typeof s !== 'object') continue;
+        if (s.done && !s.error) continue; // already recorded as ready in prefs
+        // An in-flight download was aborted by the refresh/restart. Mark it
+        // as interrupted so the user sees a resume affordance rather than
+        // losing the progress entirely.
+        if (!s.done) dlState[id] = { pct: s.pct || 0, label: 'interrupted — resume', done: false, error: null, interrupted: true };
+        else dlState[id] = { pct: s.pct || 0, label: s.label || '', done: true, error: s.error || null };
+      }
+    }
+    function setDl(id, patch) {
+      dlState[id] = { ...(dlState[id] || {}), ...patch };
+      if (dlSaveTimer) clearTimeout(dlSaveTimer);
+      dlSaveTimer = setTimeout(persistDlState, 400);
+    }
     function registerPaint(id, fn) { dlPaints[id] = fn; }
     function paintDl(id) {
       if (dlPaints[id]) { try { dlPaints[id](dlState[id]); } catch (e) {} }
@@ -709,7 +805,7 @@ ${toolsJson}`;
       const m = MODELS.find(x => x.id === modelId);
       if (!m || downloading[m.id]) return;
       downloading[m.id] = true;
-      setDl(modelId, { pct: 0, label: 'starting…', done: false, error: null });
+      setDl(modelId, { pct: 0, label: 'starting…', done: false, error: null, interrupted: false });
       paintDl(modelId);
       try {
         if (m.engine === 'transformers') {
@@ -796,6 +892,12 @@ ${toolsJson}`;
 
       $('#statusMsg').textContent = 'Ready. Models run 100% locally — fetch weights once in Settings → Downloads, then test.';
       $('#status').className = 'status-ok';
+
+      // Recover readiness from the browser's real caches, then reflect any
+      // restored in-flight/interrupted download state in the UI.
+      try { await reconcileCacheReadiness(); } catch (e) {}
+      buildModelPicker();
+      renderSettings();
     }
 
     /* ============================================================
@@ -1478,6 +1580,7 @@ ${toolsJson}`;
     $('#showNotReady').checked = !!prefs.showNotReady;
 
     loadHistory();
+    restoreDlState();
     init();
     renderSettings();
   </script>
