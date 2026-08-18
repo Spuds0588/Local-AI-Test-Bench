@@ -18,29 +18,52 @@
     }
     * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
     body { background: var(--bg); color: var(--text); margin: 0; padding: 2rem; display: flex; justify-content: center; }
-    main { width: 100%; max-width: 1400px; display: flex; flex-direction: column; gap: 1.25rem; }
+    main { width: 100%; max-width: 1400px; display: flex; flex-direction: column; gap: 1.1rem; }
     h1, h2, h3 { margin: 0; }
-    h1 { font-size: 1.4rem; }
+    h1 { font-size: 1.35rem; }
     h2 { font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem; }
-    .subtitle { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
+    .subtitle { color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
 
-    #status { padding: 0.75rem; border-radius: 6px; background: var(--surface); font-size: 0.9rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    /* Header + tabs */
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .brand { display: flex; flex-direction: column; }
+    .tabs { display: flex; gap: 0.4rem; }
+    .tab { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.5rem 1.1rem; font-size: 0.9rem; }
+    .tab.active { background: var(--surface); color: var(--text); border-color: var(--accent); }
+
+    /* Status bar */
+    #status { padding: 0.65rem 0.9rem; border-radius: 6px; background: var(--surface); font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     .status-ok { border-left: 4px solid var(--success); }
     .status-err { border-left: 4px solid var(--danger); }
     .status-warn { border-left: 4px solid var(--warn); }
     #chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-    .chip { font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .chip { font-size: 0.7rem; padding: 0.18rem 0.5rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
     .chip.ok { color: var(--success); border-color: rgba(166,227,161,.4); }
     .chip.warn { color: var(--warn); border-color: rgba(249,226,175,.4); }
     .chip.err { color: var(--danger); border-color: rgba(243,139,168,.4); }
 
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.25rem; display: flex; flex-direction: column; gap: 0.8rem; }
     .hint { color: var(--muted); font-size: 0.78rem; font-weight: normal; }
+
+    /* Wizard stepper */
+    .stepper { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .step-pill { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.9rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 0.82rem; cursor: pointer; user-select: none; }
+    .step-pill .num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #313244; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
+    .step-pill.active { border-color: var(--accent); color: var(--text); }
+    .step-pill.active .num { background: var(--accent); color: #11111b; }
+    .step-pill.done { border-color: rgba(166,227,161,.5); color: var(--success); }
+    .step-pill.done .num { background: var(--success); color: #11111b; }
+    .step-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .step { display: none; flex-direction: column; gap: 0.9rem; }
+    .step.active { display: flex; }
+    .step-nav { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; margin-top: 0.25rem; }
+    .step-nav .spacer { flex: 1; }
+    .step-error { color: var(--danger); font-size: 0.82rem; }
 
     label { display: flex; flex-direction: column; gap: 0.35rem; font-weight: 500; font-size: 0.85rem; }
     textarea, input, select { background: var(--surface2); color: var(--text); border: 1px solid var(--border); padding: 0.65rem; border-radius: 6px; resize: vertical; font-size: 0.9rem; }
     input[type="number"] { width: 90px; }
-    input[type="text"], input[type="url"] { width: 100%; }
     textarea:focus, input:focus, select:focus { outline: 1px solid var(--accent); }
     select { cursor: pointer; }
 
@@ -52,29 +75,38 @@
     button:hover { opacity: 0.9; }
     button:disabled { background: #585b70; cursor: not-allowed; opacity: 0.5; }
     .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-    .btn-small { padding: 0.3rem 0.7rem; font-size: 0.78rem; }
+    .btn-small { padding: 0.3rem 0.7rem; font-size: 0.76rem; }
     .btn-danger { color: var(--danger); }
-    #runBtn { font-size: 1rem; padding: 0.75rem 1.8rem; }
+    .btn-primary { font-size: 0.95rem; padding: 0.7rem 1.5rem; }
 
-    /* Engine / model picker */
+    /* Model picker (step 2) */
+    .pick-head { display: flex; flex-direction: column; gap: 0.5rem; }
+    .pick-banner { font-size: 0.8rem; color: var(--warn); background: rgba(249,226,175,.08); border: 1px solid rgba(249,226,175,.3); border-radius: 6px; padding: 0.5rem 0.75rem; }
     #modelGroups { display: flex; flex-direction: column; gap: 0.9rem; }
     .engine-group { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
     .engine-group > .eg-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.9rem; background: var(--surface2); font-weight: 600; font-size: 0.85rem; }
     .eg-head .eg-status { font-weight: normal; font-size: 0.72rem; margin-left: auto; }
-    .eg-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.4rem; padding: 0.6rem 0.9rem; }
-    .model-opt { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.82rem; cursor: pointer; padding: 0.25rem 0.3rem; border-radius: 4px; }
+    .eg-models { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 0.4rem; padding: 0.6rem 0.9rem; }
+    .eg-sub { grid-column: 1 / -1; font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+    .model-opt { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.82rem; cursor: pointer; padding: 0.28rem 0.3rem; border-radius: 4px; }
     .model-opt:hover { background: #313244; }
     .model-opt input { width: auto; margin-top: 2px; }
     .model-opt .m-label { font-weight: 600; }
     .model-opt .m-meta { color: var(--muted); font-size: 0.72rem; }
+    .model-opt.not-ready { opacity: 0.85; }
+    .model-opt.not-ready .m-label { color: var(--muted); }
+    .m-dl { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; }
+    .m-dl .dl-progress { width: 90px; height: 4px; background: #313244; border-radius: 2px; overflow: hidden; }
+    .m-dl .dl-progress > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s; }
     .badge { display: inline-block; font-size: 0.65rem; padding: 0.1rem 0.45rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .badge.ok { color: var(--success); border-color: rgba(166,227,161,.5); }
+    .badge.warn { color: var(--warn); border-color: rgba(249,226,175,.5); }
 
     /* Side-by-side grid */
     #resultsGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1rem; }
     .mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; overflow: hidden; min-height: 240px; }
     .mcard.state-running { border-color: var(--accent); }
     .mcard.state-error { border-color: var(--danger); }
-    .mcard.state-done { border-color: var(--border); }
     .mc-head { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); background: var(--surface2); }
     .mc-title { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
     .mc-title .mc-name { font-weight: 700; font-size: 0.92rem; }
@@ -93,6 +125,22 @@
     .metric b { color: var(--text); font-weight: 600; }
 
     .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* Settings */
+    .set-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); }
+    .set-row .grow { flex: 1; min-width: 0; }
+    .set-row .s-name { font-weight: 600; font-size: 0.85rem; }
+    .set-row .s-meta { color: var(--muted); font-size: 0.72rem; }
+    .set-list { display: flex; flex-direction: column; gap: 0.45rem; }
+    .dl-status { font-size: 0.75rem; white-space: nowrap; min-width: 130px; text-align: right; }
+    .dl-bar { width: 120px; height: 6px; background: #313244; border-radius: 3px; overflow: hidden; }
+    .dl-bar > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s; }
+    .switch { position: relative; width: 38px; height: 20px; flex: none; }
+    .switch input { display: none; }
+    .switch .track { position: absolute; inset: 0; background: #45475a; border-radius: 999px; transition: background 0.15s; cursor: pointer; }
+    .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text); transition: transform 0.15s; }
+    .switch input:checked + .track { background: var(--success); }
+    .switch input:checked + .track::after { transform: translateX(18px); }
 
     .table-container { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.82rem; }
@@ -114,9 +162,9 @@
 
     @media print {
       body { background: white; color: black; padding: 0; }
-      main > *:not(#historySection) { display: none !important; }
+      main > *:not(#printWrap) { display: none !important; }
       #printHeader { display: block; }
-      #historySection, .table-container, table, th, td { border-color: #ccc; background: white !important; color: black !important; }
+      #printWrap, #historySection, .table-container, table, th, td { border-color: #ccc; background: white !important; color: black !important; }
       .btn-secondary, h2 { display: none !important; }
       .cell-trim { max-width: none; white-space: pre-wrap; }
     }
@@ -125,111 +173,168 @@
 <body>
 
   <main>
-    <h1>🧪 Local SLM Test Bench <span class="subtitle">Needle 2 · SmolLM2 · LFM2.5 · FunctionGemma · Qwen · Gemma — fully in-browser</span></h1>
+    <header class="topbar">
+      <div class="brand">
+        <h1>🧪 Local SLM Test Bench</h1>
+        <span class="subtitle">Needle 2 · SmolLM2 · LFM2.5 · FunctionGemma · Qwen · Gemma — fully in-browser</span>
+      </div>
+      <nav class="tabs">
+        <button id="tabBench" class="tab active">🧪 Bench</button>
+        <button id="tabSettings" class="tab">⚙️ Settings</button>
+      </nav>
+    </header>
+
     <div id="status" class="status-warn"><span id="statusMsg">Checking engines…</span><div id="chips"></div></div>
 
-    <section class="card">
-      <h2>1 · Test Configuration</h2>
-
-      <div class="row">
-        <label>Mode
-          <select id="mode">
-            <option value="chat">💬 Chat / Instruction Following</option>
-            <option value="tool">🛠️ Tool Calling &amp; Structured Output</option>
-          </select>
-        </label>
-        <label>Max Tokens
-          <input type="number" id="maxTokens" value="256" min="16" max="2048">
-        </label>
-        <label>Iterations
-          <input type="number" id="iterations" value="1" min="1" max="50">
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" id="retainHistory" checked> Retain Context History (Conversational vs Stateless)
-        </label>
+    <!-- ================= BENCH VIEW ================= -->
+    <div id="viewBench">
+      <div class="stepper" id="stepper">
+        <div class="step-pill active" data-step="1"><span class="num">1</span> Configure Test</div>
+        <div class="step-pill" data-step="2"><span class="num">2</span> Select Models</div>
+        <div class="step-pill" data-step="3"><span class="num">3</span> Run &amp; Compare</div>
       </div>
 
-      <label>System Prompt
-        <textarea id="sysPrompt" rows="2" placeholder="e.g., Answer in markdown format."></textarea>
-      </label>
+      <!-- Step 1 · Configure -->
+      <section id="step1" class="step card active">
+        <h2>1 · What kind of test?</h2>
 
-      <div id="toolPanel" style="display:none;">
-        <label>Tools (JSON array of function schemas)
-          <textarea id="toolsJson" rows="9" spellcheck="false"></textarea>
+        <div class="row">
+          <label>Mode
+            <select id="mode">
+              <option value="chat">💬 Chat / Instruction Following</option>
+              <option value="tool">🛠️ Tool Calling &amp; Structured Output</option>
+            </select>
+          </label>
+          <label>Max Tokens
+            <input type="number" id="maxTokens" value="256" min="16" max="2048">
+          </label>
+          <label>Iterations
+            <input type="number" id="iterations" value="1" min="1" max="50">
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="retainHistory" checked> Retain Context History
+          </label>
+        </div>
+
+        <label>System Prompt
+          <textarea id="sysPrompt" rows="2" placeholder="e.g., Answer in markdown format."></textarea>
         </label>
-        <p class="hint" style="margin:0;">
-          Tool-calling protocol: <b>Needle 2</b> and <b>FunctionGemma</b> use their native tool formats. All other models
-          receive the tool schemas in the system prompt and are asked to reply with a single JSON object
-          <code>{"function": "...", "arguments": {...}}</code> (or <code>{"function": null}</code> if no tool fits).
-        </p>
-      </div>
 
-      <label>User Prompt / Request
-        <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
-      </label>
+        <div id="toolPanel" style="display:none;">
+          <label>Tools (JSON array of function schemas)
+            <textarea id="toolsJson" rows="8" spellcheck="false"></textarea>
+          </label>
+          <p class="hint" style="margin:0;">
+            Tool-calling protocol: <b>Needle 2</b> and <b>FunctionGemma</b> use their native tool formats. All other models
+            receive the tool schemas in the system prompt and are asked to reply with a single JSON object
+            <code>{"function": "...", "arguments": {...}}</code> (or <code>{"function": null}</code> if no tool fits).
+          </p>
+        </div>
 
-      <div class="row">
-        <label>Inject File Context (Max ~20kb)
-          <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css">
+        <label>User Prompt / Request
+          <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
         </label>
-      </div>
-    </section>
 
-    <section class="card">
-      <h2>2 · Models to Run <span class="hint">(checked models run side-by-side; weights download once and are cached by your browser)</span></h2>
-      <div id="modelGroups"></div>
-    </section>
+        <div class="row">
+          <label>Inject File Context (Max ~20kb)
+            <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css">
+          </label>
+        </div>
 
-    <div class="toolbar">
-      <button id="runBtn">▶ Run Bench</button>
-      <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
-      <button id="clearBtn" class="btn-secondary">Clear Inputs</button>
-      <span id="benchStatus" class="hint"></span>
+        <div class="step-nav">
+          <span class="spacer"></span>
+          <button id="s1Next" class="btn-primary">Next: Select Models →</button>
+        </div>
+      </section>
+
+      <!-- Step 2 · Select models -->
+      <section id="step2" class="step card">
+        <h2>2 · Which models?</h2>
+        <div class="pick-head">
+          <p class="hint" style="margin:0;" id="pickSummary">Loading…</p>
+          <label class="checkbox-label">
+            <input type="checkbox" id="showNotReady"> Show models that aren't downloaded yet
+          </label>
+        </div>
+        <div id="modelGroups"></div>
+        <div class="step-nav">
+          <button id="s2Back" class="btn-secondary">◀ Back</button>
+          <span class="spacer"></span>
+          <button id="runBtn" class="btn-primary">▶ Run Test</button>
+        </div>
+      </section>
+
+      <!-- Step 3 · Run & compare -->
+      <section id="step3" class="step card">
+        <h2>3 · Run &amp; Compare</h2>
+        <div class="toolbar">
+          <span id="benchStatus" class="hint"></span>
+          <span class="spacer" style="flex:1"></span>
+          <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
+        </div>
+        <div id="resultsGrid"><p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p></div>
+
+        <div class="table-container">
+          <table id="summaryTable">
+            <thead>
+              <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
+            </thead>
+            <tbody><tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
+          </table>
+        </div>
+
+        <div id="printWrap">
+          <div id="printHeader">
+            <h3>Mode</h3><p id="printMode"></p>
+            <h3>System Prompt (Latest)</h3><p id="printSys"></p>
+            <h3>User Prompt (Latest)</h3><p id="printUser"></p>
+            <h3>Tools (Latest)</h3><p id="printTools"></p>
+          </div>
+
+          <div class="row" style="justify-content: space-between; align-items:center;">
+            <h2>Run History</h2>
+            <div class="row" style="gap: 0.5rem;">
+              <button id="exportCsvBtn" class="btn-secondary btn-small">⬇️ CSV</button>
+              <button id="exportPdfBtn" class="btn-secondary btn-small">🖨️ PDF</button>
+              <button id="clearHistoryBtn" class="btn-secondary btn-small btn-danger">🗑️ Clear</button>
+            </div>
+          </div>
+
+          <div class="table-container" style="margin-top:0.75rem;">
+            <table id="historyTable">
+              <thead>
+                <tr><th>Date/Time</th><th>Mode</th><th>Models</th><th>Avg Time (s)</th><th>Avg Δ%</th><th>Prompt Preview</th></tr>
+              </thead>
+              <tbody id="historyBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="step-nav">
+          <button id="s3Back" class="btn-secondary">◀ Edit Models</button>
+          <span class="spacer"></span>
+          <button id="rerunBtn" class="btn-secondary">↻ Rerun Same Test</button>
+        </div>
+      </section>
     </div>
 
-    <section class="card">
-      <h2>3 · Side-by-Side Results</h2>
-      <div id="resultsGrid"><p class="hint" style="margin:0;">Select models above and press <b>Run Bench</b>. Each model gets its own card; timing and output length are measured per iteration.</p></div>
-    </section>
+    <!-- ================= SETTINGS VIEW ================= -->
+    <div id="viewSettings" style="display:none;">
+      <section class="card">
+        <h2>Displayed Models <span class="hint">(which models appear in the bench picker)</span></h2>
+        <div class="set-list" id="displayList"></div>
+      </section>
 
-    <section class="card">
-      <h2>Comparison Summary <span class="hint">(last run)</span></h2>
-      <div class="table-container">
-        <table id="summaryTable">
-          <thead>
-            <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
-          </thead>
-          <tbody><tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
-        </table>
-      </div>
-    </section>
+      <section class="card">
+        <h2>Downloads <span class="hint">(pre-fetch weights so models are ready to test — only ready models appear in the bench)</span></h2>
+        <div class="set-list" id="downloadList"></div>
+      </section>
 
-    <section id="historySection">
-      <div id="printHeader">
-        <h3>Mode</h3><p id="printMode"></p>
-        <h3>System Prompt (Latest)</h3><p id="printSys"></p>
-        <h3>User Prompt (Latest)</h3><p id="printUser"></p>
-        <h3>Tools (Latest)</h3><p id="printTools"></p>
+      <div class="step-nav">
+        <span class="spacer"></span>
+        <button id="settingsDone" class="btn-primary">← Back to Bench</button>
       </div>
-
-      <div class="row" style="justify-content: space-between; align-items:center;">
-        <h2>4 · Run History</h2>
-        <div class="row" style="gap: 0.5rem;">
-          <button id="exportCsvBtn" class="btn-secondary btn-small">⬇️ CSV</button>
-          <button id="exportPdfBtn" class="btn-secondary btn-small">🖨️ PDF</button>
-          <button id="clearHistoryBtn" class="btn-secondary btn-small btn-danger">🗑️ Clear</button>
-        </div>
-      </div>
-
-      <div class="table-container" style="margin-top:0.75rem;">
-        <table id="historyTable">
-          <thead>
-            <tr><th>Date/Time</th><th>Mode</th><th>Models</th><th>Avg Time (s)</th><th>Avg Δ%</th><th>Prompt Preview</th></tr>
-          </thead>
-          <tbody id="historyBody"></tbody>
-        </table>
-      </div>
-    </section>
+    </div>
   </main>
 
   <script>
@@ -240,6 +345,7 @@
 
     /* ============================================================
      *  Registry — engines and models
+     *  modes: 'chat' and/or 'tool' — the picker filters by these.
      * ============================================================ */
     const ENGINES = {
       builtin:      { name: 'Chrome Built-in AI',       color: '#89b4fa' },
@@ -250,25 +356,25 @@
 
     const MODELS = [
       // ---- Chrome built-in (Gemini Nano) ----
-      { id: 'nano',                 engine: 'builtin',      label: 'Gemini Nano',            params: '~1.8B', size: '~1.5GB', note: 'Chrome built-in AI' },
+      { id: 'nano',                 engine: 'builtin',      modes: ['chat'],     label: 'Gemini Nano',            params: '~1.8B', size: '~1.5GB', note: 'Chrome built-in AI' },
       // ---- Needle 2 (vendored WASM) ----
-      { id: 'needle2',              engine: 'needle',       label: 'Needle 2',               params: '45M',   size: '14MB',  note: 'Cactus Compute · agentic tool calling' },
+      { id: 'needle2',              engine: 'needle',       modes: ['tool'],     label: 'Needle 2',               params: '45M',   size: '14MB',  note: 'Cactus Compute · agentic tool calling' },
       // ---- Transformers.js (ONNX, WASM or WebGPU) ----
-      { id: 'tf-smollm2-135m',      engine: 'transformers', repo: 'onnx-community/SmolLM2-135M-Instruct-ONNX',        label: 'SmolLM2-135M-Instruct',    params: '135M', size: '~100MB', note: 'Hugging Face' },
-      { id: 'tf-smollm2-360m',      engine: 'transformers', repo: 'onnx-community/SmolLM2-360M-Instruct-ONNX',        label: 'SmolLM2-360M-Instruct',    params: '360M', size: '~230MB', note: 'Hugging Face' },
-      { id: 'tf-lfm25-350m',        engine: 'transformers', repo: 'onnx-community/LFM2.5-350M-ONNX',                  label: 'LFM2.5-350M',              params: '350M', size: '~240MB', note: 'Liquid AI · hybrid' },
-      { id: 'tf-functiongemma-270m',engine: 'transformers', repo: 'onnx-community/functiongemma-270m-it-ONNX',        label: 'FunctionGemma-270M-it',    params: '270M', size: '~200MB', note: 'Google · native tool calling' },
-      { id: 'tf-qwen3-0.6b',        engine: 'transformers', repo: 'onnx-community/Qwen3-0.6B-ONNX',                   label: 'Qwen3-0.6B',               params: '0.6B', size: '~400MB', note: 'Alibaba' },
-      { id: 'tf-qwen25-0.5b',       engine: 'transformers', repo: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',        label: 'Qwen2.5-0.5B-Instruct',    params: '0.5B', size: '~340MB', note: 'Alibaba' },
-      { id: 'tf-gemma3-1b',         engine: 'transformers', repo: 'onnx-community/gemma-3-1b-it-ONNX',                label: 'Gemma-3-1B-it',            params: '1B',   size: '~750MB', note: 'Google · Gemma terms' },
+      { id: 'tf-smollm2-135m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-135M-Instruct-ONNX',        label: 'SmolLM2-135M-Instruct',    params: '135M', size: '~100MB', note: 'Hugging Face' },
+      { id: 'tf-smollm2-360m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-360M-Instruct-ONNX',        label: 'SmolLM2-360M-Instruct',    params: '360M', size: '~230MB', note: 'Hugging Face' },
+      { id: 'tf-lfm25-350m',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/LFM2.5-350M-ONNX',                  label: 'LFM2.5-350M',              params: '350M', size: '~240MB', note: 'Liquid AI · hybrid' },
+      { id: 'tf-functiongemma-270m',engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/functiongemma-270m-it-ONNX',        label: 'FunctionGemma-270M-it',    params: '270M', size: '~200MB', note: 'Google · native tool calling' },
+      { id: 'tf-qwen3-0.6b',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen3-0.6B-ONNX',                   label: 'Qwen3-0.6B',               params: '0.6B', size: '~400MB', note: 'Alibaba' },
+      { id: 'tf-qwen25-0.5b',       engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',        label: 'Qwen2.5-0.5B-Instruct',    params: '0.5B', size: '~340MB', note: 'Alibaba' },
+      { id: 'tf-gemma3-1b',         engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/gemma-3-1b-it-ONNX',                label: 'Gemma-3-1B-it',            params: '1B',   size: '~750MB', note: 'Google · Gemma terms' },
       // ---- WebLLM (WebGPU) ----
-      { id: 'wl-qwen3-0.6b',        engine: 'webllm',       wlId: 'Qwen3-0.6B-q4f16_1-MLC',               label: 'Qwen3-0.6B (WebGPU)',      params: '0.6B', size: '~500MB', note: 'Alibaba' },
-      { id: 'wl-qwen25-0.5b',       engine: 'webllm',       wlId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-0.5B-Instruct (WebGPU)', params: '0.5B', size: '~400MB', note: 'Alibaba' },
-      { id: 'wl-qwen25-1.5b',       engine: 'webllm',       wlId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-1.5B-Instruct (WebGPU)', params: '1.5B', size: '~900MB', note: 'Alibaba' },
-      { id: 'wl-gemma3-1b',         engine: 'webllm',       wlId: 'gemma3-1b-it-q4f16_1-MLC',             label: 'Gemma-3-1B-it (WebGPU)',    params: '1B',   size: '~700MB', note: 'Google · Gemma terms' },
-      { id: 'wl-gemma2-2b',         engine: 'webllm',       wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', note: 'Google · Gemma terms' },
-      { id: 'wl-smollm2-1.7b',      engine: 'webllm',       wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', note: 'Hugging Face' },
-      { id: 'wl-smollm2-360m',      engine: 'webllm',       wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', note: 'Hugging Face' },
+      { id: 'wl-qwen3-0.6b',        engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen3-0.6B-q4f16_1-MLC',               label: 'Qwen3-0.6B (WebGPU)',      params: '0.6B', size: '~500MB', note: 'Alibaba' },
+      { id: 'wl-qwen25-0.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-0.5B-Instruct (WebGPU)', params: '0.5B', size: '~400MB', note: 'Alibaba' },
+      { id: 'wl-qwen25-1.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-1.5B-Instruct (WebGPU)', params: '1.5B', size: '~900MB', note: 'Alibaba' },
+      { id: 'wl-gemma3-1b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma3-1b-it-q4f16_1-MLC',             label: 'Gemma-3-1B-it (WebGPU)',    params: '1B',   size: '~700MB', note: 'Google · Gemma terms' },
+      { id: 'wl-gemma2-2b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', note: 'Google · Gemma terms' },
+      { id: 'wl-smollm2-1.7b',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', note: 'Hugging Face' },
+      { id: 'wl-smollm2-360m',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', note: 'Hugging Face' },
     ];
 
     const DEFAULT_TOOLS = [
@@ -306,59 +412,349 @@ Available tools (JSON schema):
 ${toolsJson}`;
 
     /* ============================================================
-     *  State
+     *  State & prefs
      * ============================================================ */
-    let selectedIds = new Set(JSON.parse(localStorage.getItem('slmSelected') || 'null') || ['nano', 'needle2', 'tf-smollm2-135m', 'tf-functiongemma-270m', 'tf-qwen3-0.6b']);
+    let selectedIds = new Set(JSON.parse(localStorage.getItem('slmSelected') || 'null') || ['nano', 'needle2']);
     let sessions = {};      // modelId -> adapter handle
     let runHistory = [];    // batches
     let currentBatch = -1;
     let stopped = false;
+    let running = false;
     let currentCards = {};
+    let currentBatchEntry = null;
+
+    const DEFAULT_PREFS = { hidden: [], downloaded: {}, showNotReady: false };
+    let prefs = { ...DEFAULT_PREFS, ...(JSON.parse(localStorage.getItem('slmPrefs2') || 'null') || {}) };
+    function savePrefs() { localStorage.setItem('slmPrefs2', JSON.stringify(prefs)); }
+
+    let builtinStatus = 'missing';   // 'ready' | 'missing' | 'downloading' | 'error'
+    let webgpuAvailable = !!navigator.gpu;
+    let downloading = {};            // modelId -> true while in-flight
 
     /* ============================================================
-     *  Model picker UI
+     *  Readiness & filtering
+     * ============================================================ */
+    function inherentlyReady(m) {
+      if (m.engine === 'needle') return true;               // vendored in repo
+      if (m.engine === 'builtin') return builtinStatus === 'ready';
+      return false;
+    }
+    function modelReady(m) {
+      if (inherentlyReady(m)) return true;
+      return !!prefs.downloaded[m.id];
+    }
+    function engineAvailable(m) {
+      if (m.engine === 'builtin') return builtinStatus !== 'missing' && builtinStatus !== 'error';
+      if (m.engine === 'webllm') return webgpuAvailable;
+      return true;
+    }
+    function applicableToMode(m) {
+      const mode = currentMode();
+      return (m.modes || ['chat', 'tool']).includes(mode);
+    }
+    function visibleModel(m) {
+      return !prefs.hidden.includes(m.id);
+    }
+
+    /* ============================================================
+     *  Wizard / view navigation
+     * ============================================================ */
+    let currentStep = 1;
+    function goStep(n) {
+      if (running && n !== 3) return;
+      currentStep = n;
+      ['step1', 'step2', 'step3'].forEach((id, i) => {
+        $('#' + id).classList.toggle('active', i === n - 1);
+      });
+      document.querySelectorAll('#stepper .step-pill').forEach(pill => {
+        const s = +pill.dataset.step;
+        pill.classList.toggle('active', s === n);
+        pill.classList.toggle('done', s < n);
+        pill.disabled = running && s !== 3;
+      });
+      if (n === 2) buildModelPicker();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    function showView(view) {
+      $('#viewBench').style.display = view === 'bench' ? '' : 'none';
+      $('#viewSettings').style.display = view === 'settings' ? '' : 'none';
+      $('#tabBench').classList.toggle('active', view === 'bench');
+      $('#tabSettings').classList.toggle('active', view === 'settings');
+      if (view === 'bench') goStep(currentStep);
+      if (view === 'settings') renderSettings();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /* ============================================================
+     *  Model picker (step 2)
      * ============================================================ */
     function buildModelPicker() {
-      const groups = {};
-      MODELS.forEach(m => { (groups[m.engine] = groups[m.engine] || []).push(m); });
       const host = $('#modelGroups');
       host.innerHTML = '';
+
+      // Group by engine, split ready vs not-ready, respect filters.
+      const groups = {};
+      MODELS.forEach(m => {
+        if (!visibleModel(m) || !applicableToMode(m) || !engineAvailable(m)) return;
+        (groups[m.engine] = groups[m.engine] || []).push(m);
+      });
+
+      let readyCount = 0, hiddenCount = 0, unavailableCount = 0;
+      const unavailable = [];
+      MODELS.forEach(m => {
+        if (!visibleModel(m) || !applicableToMode(m)) return;
+        if (!engineAvailable(m)) { unavailableCount++; unavailable.push(ENGINES[m.engine].name); return; }
+        if (modelReady(m)) readyCount++; else hiddenCount++;
+      });
+      const showAll = $('#showNotReady').checked;
+      $('#pickSummary').textContent =
+        `${readyCount} ready · ${hiddenCount} not downloaded yet` +
+        (unavailableCount ? ` · ${unavailableCount} hidden (${[...new Set(unavailable)].join(', ')})` : '') +
+        ` · ${[...selectedIds].filter(id => MODELS.some(m => m.id === id && visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelReady(m))).length} selected`;
+
       Object.entries(groups).forEach(([eng, models]) => {
+        const ready = models.filter(modelReady);
+        const notReady = models.filter(m => !modelReady(m));
         const g = document.createElement('div');
         g.className = 'engine-group';
-        const head = document.createElement('div');
-        head.className = 'eg-head';
-        head.innerHTML = `<span style="color:${ENGINES[eng].color}">■</span> ${ENGINES[eng].name}
-          <span class="eg-status" id="egStatus-${eng}"></span>
-          <button class="btn-small btn-secondary" id="selAll-${eng}">All</button>
-          <button class="btn-small btn-secondary" id="selNone-${eng}">None</button>`;
+        g.innerHTML = `<div class="eg-head"><span style="color:${ENGINES[eng].color}">■</span> ${ENGINES[eng].name}
+          <span class="eg-status">${ready.length} ready / ${notReady.length} to download</span></div>`;
+
         const grid = document.createElement('div');
         grid.className = 'eg-models';
-        models.forEach(m => {
-          const l = document.createElement('label');
-          l.className = 'model-opt';
-          const cb = document.createElement('input');
-          cb.type = 'checkbox'; cb.checked = selectedIds.has(m.id);
-          cb.onchange = () => { cb.checked ? selectedIds.add(m.id) : selectedIds.delete(m.id); persistSelection(); };
-          l.appendChild(cb);
-          const span = document.createElement('span');
-          span.innerHTML = `<span class="m-label">${escHTML(m.label)}</span>
-            <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>`;
-          l.appendChild(span);
-          grid.appendChild(l);
-        });
-        g.appendChild(head); g.appendChild(grid);
+
+        if (!ready.length && (!showAll || !notReady.length)) {
+          grid.innerHTML = `<div class="eg-sub">No ready models from this engine yet.</div>`;
+        }
+        ready.forEach(m => grid.appendChild(modelRow(m, true)));
+        if (showAll) {
+          if (ready.length && notReady.length) grid.innerHTML += `<div class="eg-sub">— Not downloaded yet —</div>`;
+          notReady.forEach(m => grid.appendChild(modelRow(m, false)));
+        }
+        g.appendChild(grid);
         host.appendChild(g);
-        $(`#selAll-${eng}`).onclick = () => { models.forEach(m => selectedIds.add(m.id)); persistSelection(); buildModelPicker(); };
-        $(`#selNone-${eng}`).onclick = () => { models.forEach(m => selectedIds.delete(m.id)); persistSelection(); buildModelPicker(); };
       });
+
+      if (!Object.keys(groups).length) {
+        host.innerHTML = `<p class="hint" style="margin:0;">No models match this test yet.
+          ${hiddenCount ? 'Open <b>Settings → Downloads</b> to fetch weights, or tick “Show models that aren’t downloaded yet” below.' : ''}</p>`;
+      }
+      if (hiddenCount && !showAll) {
+        const banner = document.createElement('div');
+        banner.className = 'pick-banner';
+        banner.innerHTML = `${hiddenCount} model(s) hidden — not downloaded yet. Tick “Show models that aren't downloaded yet” to see and fetch them, or use <b>Settings → Downloads</b>.`;
+        host.prepend(banner);
+      }
+      if (unavailableCount) {
+        const banner = document.createElement('div');
+        banner.className = 'pick-banner';
+        banner.textContent = `${unavailableCount} model(s) hidden because their engine isn't available here (${[...new Set(unavailable)].join(', ')}).`;
+        host.prepend(banner);
+      }
+      persistSelection();
     }
+
+    function modelRow(m, ready) {
+      const l = document.createElement('label');
+      l.className = 'model-opt' + (ready ? '' : ' not-ready');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = selectedIds.has(m.id); cb.disabled = !ready;
+      cb.onchange = () => { cb.checked ? selectedIds.add(m.id) : selectedIds.delete(m.id); persistSelection(); };
+      l.appendChild(cb);
+      const span = document.createElement('span');
+      span.style.minWidth = '0';
+      span.innerHTML = `<span class="m-label">${escHTML(m.label)}</span>
+        <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>`;
+      if (!ready) {
+        const dl = document.createElement('div');
+        dl.className = 'm-dl';
+        dl.innerHTML = `<button class="btn-small btn-secondary dl-go">⬇ Download</button>
+          <span class="dl-progress"><div></div></span><span class="dl-label hint"></span>`;
+        const btn = dl.querySelector('.dl-go'), barDiv = dl.querySelector('.dl-progress > div'), lbl = dl.querySelector('.dl-label');
+        registerPaint(m.id, s => {
+          const busy = !!downloading[m.id];
+          btn.disabled = busy || (s && s.done && !s.error);
+          btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Ready' : '⬇ Download');
+          barDiv.style.width = (s && s.pct ? s.pct : 0) + '%';
+          lbl.textContent = s ? s.label : '';
+          lbl.style.color = s && s.error ? 'var(--danger)' : '';
+        });
+        btn.onclick = () => startDownload(m.id, () => { buildModelPicker(); renderSettings(); });
+        paintDl(m.id);
+        span.appendChild(dl);
+        l.appendChild(span);
+        return l;
+      }
+      const badge = document.createElement('span');
+      badge.className = 'badge ok';
+      badge.textContent = 'ready';
+      span.appendChild(badge);
+      l.appendChild(span);
+      return l;
+    }
+
     function persistSelection() {
       localStorage.setItem('slmSelected', JSON.stringify([...selectedIds]));
-      updateRunButton();
     }
-    function updateRunButton() {
-      $('#runBtn').disabled = ![...selectedIds].some(id => MODELS.some(m => m.id === id));
+
+    /* ============================================================
+     *  Settings view
+     * ============================================================ */
+    function renderSettings() {
+      // Displayed models
+      const dl = $('#displayList');
+      dl.innerHTML = '';
+      MODELS.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'set-row';
+        const info = document.createElement('div');
+        info.className = 'grow';
+        info.innerHTML = `<div class="s-name">${escHTML(m.label)}</div>
+          <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)}</div>`;
+        row.appendChild(info);
+        const sw = document.createElement('label');
+        sw.className = 'switch';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = !prefs.hidden.includes(m.id);
+        cb.onchange = () => {
+          if (cb.checked) prefs.hidden = prefs.hidden.filter(x => x !== m.id);
+          else if (!prefs.hidden.includes(m.id)) prefs.hidden.push(m.id);
+          savePrefs();
+        };
+        const track = document.createElement('span'); track.className = 'track';
+        sw.appendChild(cb); sw.appendChild(track);
+        row.appendChild(sw);
+        dl.appendChild(row);
+      });
+      const controls = document.createElement('div');
+      controls.className = 'row wrap';
+      controls.innerHTML = `<button class="btn-small btn-secondary" id="showAllModels">Show all</button>
+        <button class="btn-small btn-secondary" id="hideAllModels">Hide all</button>`;
+      dl.prepend(controls);
+      $('#showAllModels').onclick = () => { prefs.hidden = []; savePrefs(); renderSettings(); };
+      $('#hideAllModels').onclick = () => { prefs.hidden = MODELS.map(m => m.id); savePrefs(); renderSettings(); };
+
+      // Downloads
+      const dll = $('#downloadList');
+      dll.innerHTML = '';
+      MODELS.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'set-row';
+        const noDownload = m.engine === 'needle' || m.engine === 'builtin';
+        const ready = modelReady(m);
+        const state = downloading[m.id] ? 'downloading' : (ready ? 'ready' : 'missing');
+        row.innerHTML = `<div class="grow"><div class="s-name">${escHTML(m.label)}</div>
+          <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)} · ${escHTML(m.size)}</div></div>`;
+        const status = document.createElement('div');
+        status.className = 'dl-status';
+        if (noDownload) {
+          const builtinOk = m.engine === 'needle' || builtinStatus === 'ready';
+          status.innerHTML = builtinOk
+            ? `<span class="badge ok">${m.engine === 'needle' ? 'vendored · always ready' : 'built-in · no download'}</span>`
+            : `<span class="badge warn">not available in this browser</span>`;
+          row.appendChild(status);
+        } else if (state === 'ready') {
+          status.innerHTML = `<span class="badge ok">ready ✓</span>`;
+          row.appendChild(status);
+        } else {
+          status.innerHTML = `<span class="badge warn">${state === 'downloading' ? 'downloading…' : 'not downloaded'}</span>`;
+          row.appendChild(status);
+        }
+        const bar = document.createElement('div');
+        bar.className = 'dl-bar';
+        bar.innerHTML = '<div></div>';
+        const btn = document.createElement('button');
+        btn.className = 'btn-small btn-secondary';
+        if (noDownload) {
+          btn.disabled = true; btn.textContent = m.engine === 'needle' ? 'Vendored in repo' : 'Browser API';
+        } else {
+          const barDiv = bar.querySelector('div');
+          registerPaint(m.id, s => {
+            const busy = !!downloading[m.id];
+            btn.disabled = busy || (s && s.done && !s.error);
+            btn.textContent = busy ? 'Downloading…' : (s && s.done && !s.error ? '✓ Downloaded' : '⬇ Download');
+            barDiv.style.width = (s && s.pct ? s.pct : 0) + '%';
+            status.innerHTML = busy
+              ? `<span class="badge warn">${s && s.label ? escHTML(s.label) : 'downloading…'}</span>`
+              : (s && s.done && !s.error
+                  ? '<span class="badge ok">ready ✓</span>'
+                  : (s && s.error
+                      ? `<span class="badge err" style="color:var(--danger)">❌ failed</span>`
+                      : '<span class="badge warn">not downloaded</span>'));
+          });
+          btn.onclick = () => startDownload(m.id, () => renderSettings());
+          paintDl(m.id);
+          row.appendChild(bar);
+        }
+        row.appendChild(btn);
+        dll.appendChild(row);
+      });
+    }
+
+    /* ============================================================
+     *  Pre-download manager
+     *  Download progress is kept in `dlState` and painted through
+     *  per-model paint functions registered by whatever UI is visible,
+     *  so progress survives re-renders of the picker / settings.
+     * ============================================================ */
+    const dlState = {};   // modelId -> { pct, label, done, error }
+    const dlPaints = {};  // modelId -> paint fn
+    function setDl(id, patch) { dlState[id] = { ...(dlState[id] || {}), ...patch }; }
+    function registerPaint(id, fn) { dlPaints[id] = fn; }
+    function paintDl(id) {
+      if (dlPaints[id]) { try { dlPaints[id](dlState[id]); } catch (e) {} }
+    }
+
+    async function startDownload(modelId, onDone) {
+      const m = MODELS.find(x => x.id === modelId);
+      if (!m || downloading[m.id]) return;
+      downloading[m.id] = true;
+      setDl(modelId, { pct: 0, label: 'starting…', done: false, error: null });
+      paintDl(modelId);
+      try {
+        if (m.engine === 'transformers') {
+          const tf = await getTf();
+          const useWebGPU = webgpuAvailable && m.params !== '135M' && m.params !== '360M';
+          const device = useWebGPU ? 'webgpu' : 'wasm';
+          const dtype = device === 'webgpu' ? 'q4' : 'q8';
+          const progressCb = data => {
+            if (data.status === 'progress') {
+              setDl(modelId, { pct: Math.round(data.progress), label: `${Math.round(data.loaded / 1048576) || 0}MB / ${Math.round(data.total / 1048576) || '?'}MB` });
+            } else if (data.status === 'initiate') setDl(modelId, { label: 'fetching ' + (data.file || '') });
+            else if (data.status === 'done') setDl(modelId, { pct: 100, label: 'cached ✓' });
+            paintDl(modelId);
+          };
+          let tokenizer = null, lm = null, lastErr = null;
+          for (const a of [{ device, dtype }, { device: 'wasm', dtype: 'q8' }, {}]) {
+            try {
+              tokenizer = await tf.AutoTokenizer.from_pretrained(m.repo, { progress_callback: progressCb });
+              lm = await tf.AutoModelForCausalLM.from_pretrained(m.repo, { dtype: a.dtype, device: a.device, progress_callback: progressCb });
+              break;
+            } catch (e) { lastErr = e; }
+          }
+          if (!lm) throw lastErr || new Error('Failed to download');
+          try { tokenizer.dispose && tokenizer.dispose(); } catch (e) {}
+          try { lm.dispose && lm.dispose(); } catch (e) {}
+        } else if (m.engine === 'webllm') {
+          if (!webgpuAvailable) throw new Error('WebGPU not available');
+          const { CreateMLCEngine } = await getWl();
+          const engine = await CreateMLCEngine(m.wlId, {
+            initProgressCallback: p => { setDl(modelId, { pct: Math.round(p.progress * 100), label: p.text }); paintDl(modelId); },
+          });
+          try { await engine.unload(); } catch (e) {}
+        } else {
+          throw new Error('No download needed for this engine.');
+        }
+        prefs.downloaded[m.id] = true;
+        savePrefs();
+        setDl(modelId, { pct: 100, label: 'ready ✓', done: true, error: null });
+      } catch (err) {
+        setDl(modelId, { label: '❌ ' + err.message, done: true, error: err.message });
+      } finally {
+        downloading[m.id] = false;
+        paintDl(modelId);
+        onDone && onDone();
+      }
     }
 
     /* ============================================================
@@ -377,37 +773,33 @@ ${toolsJson}`;
     }
 
     async function init() {
-      // Built-in AI
       try {
         const ai = await getBuiltinAI();
-        if (!ai) { chip('builtin', 'Built-in AI: not available', 'err'); }
+        if (!ai) { builtinStatus = 'missing'; chip('builtin', 'Built-in AI: not available', 'err'); }
         else {
           let st = await ai.getStatus();
           if (typeof st !== 'string') st = st.available || st;
-          chip('builtin', `Built-in AI: ${st}`, st === 'available' || st === 'readily' ? 'ok' : 'warn');
+          builtinStatus = (st === 'available' || st === 'readily') ? 'ready' : 'downloading';
+          chip('builtin', `Built-in AI: ${st}`, builtinStatus === 'ready' ? 'ok' : 'warn');
         }
-      } catch (e) { chip('builtin', 'Built-in AI: error', 'err'); }
+      } catch (e) { builtinStatus = 'error'; chip('builtin', 'Built-in AI: error', 'err'); }
 
-      // Needle 2 (vendored)
       try {
         const r = await fetch(new URL('vendor/needle/needle.wasm', location.href), { method: 'HEAD' });
         chip('needle', r.ok ? 'Needle 2: vendored ✓' : 'Needle 2: missing', r.ok ? 'ok' : 'err');
       } catch { chip('needle', 'Needle 2: unreachable', 'err'); }
 
-      // WebGPU (used by WebLLM and optional for Transformers.js)
-      chip('webgpu', navigator.gpu ? 'WebGPU: available' : 'WebGPU: unavailable (WASM fallback)', navigator.gpu ? 'ok' : 'warn');
-
-      // Transformers.js / WebLLM CDNs (loaded lazily on first use)
+      webgpuAvailable = !!navigator.gpu;
+      chip('webgpu', webgpuAvailable ? 'WebGPU: available' : 'WebGPU: unavailable (WASM fallback)', webgpuAvailable ? 'ok' : 'warn');
       chip('tfjs', 'Transformers.js: on-demand CDN', 'ok');
       chip('webllm', 'WebLLM: on-demand CDN', 'ok');
 
-      const msg = $('#statusMsg');
-      msg.textContent = 'Ready. Models run 100% locally in your browser (first use downloads weights from Hugging Face, then caches them).';
+      $('#statusMsg').textContent = 'Ready. Models run 100% locally — fetch weights once in Settings → Downloads, then test.';
       $('#status').className = 'status-ok';
     }
 
     /* ============================================================
-     *  Adapters
+     *  Adapters (shared by run + pre-download)
      * ============================================================ */
     function resetSessions(excludeRetain) {
       const retain = $('#retainHistory').checked;
@@ -419,7 +811,6 @@ ${toolsJson}`;
       });
     }
 
-    // ---- Chrome Built-in ----
     async function adapterBuiltin(model, card) {
       let s = sessions[model.id];
       if (s) return s;
@@ -435,7 +826,6 @@ ${toolsJson}`;
       return s;
     }
 
-    // ---- Transformers.js ----
     let tfLibPromise = null;
     function getTf() {
       if (!tfLibPromise) {
@@ -457,7 +847,7 @@ ${toolsJson}`;
         else if (data.status === 'initiate') card.setStatus('Downloading ' + (data.file || '') + '…');
         else if (data.status === 'done') card.setStatus('Downloaded ✓');
       };
-      const useWebGPU = !!navigator.gpu && model.params !== '135M' && model.params !== '360M';
+      const useWebGPU = webgpuAvailable && model.params !== '135M' && model.params !== '360M';
       const device = useWebGPU ? 'webgpu' : 'wasm';
       const dtype = device === 'webgpu' ? 'q4' : 'q8';
       card.setStatus(`Loading (${device}/${dtype})…`);
@@ -496,10 +886,8 @@ ${toolsJson}`;
           });
           let out;
           try {
-            // v4 generate() takes a single options object (inputs + generation config + streamer)
             out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false, repetition_penalty: 1.05, streamer });
           } catch (e) {
-            // Streaming unsupported for this model — fall back to a plain generate
             out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false, repetition_penalty: 1.05 });
           }
           let genTokens = 0;
@@ -517,7 +905,6 @@ ${toolsJson}`;
       return s;
     }
 
-    // ---- WebLLM ----
     let wlLibPromise = null;
     function getWl() {
       if (!wlLibPromise) {
@@ -529,7 +916,7 @@ ${toolsJson}`;
     async function adapterWebLLM(model, card) {
       let s = sessions[model.id];
       if (s) return s;
-      if (!navigator.gpu) throw new Error('WebGPU not available — pick the Transformers.js version of this model instead.');
+      if (!webgpuAvailable) throw new Error('WebGPU not available — pick the Transformers.js version of this model instead.');
       const { CreateMLCEngine } = await getWl();
       card.setStatus('Loading WebGPU engine…');
       const engine = await CreateMLCEngine(model.wlId, {
@@ -587,7 +974,6 @@ ${toolsJson}`;
       const weights = new Uint8Array(await resp.arrayBuffer());
       const ptr = Module._malloc(weights.length);
       Module.HEAPU8.set(weights, ptr);
-      // needle_load's size param is `unsigned long long` — pass a BigInt.
       const loadRes = Module._needle_load(ptr, BigInt(weights.length));
       Module._free(ptr);
       if (loadRes != 0) throw new Error(`needle_load failed (code ${loadRes})`);
@@ -603,8 +989,6 @@ ${toolsJson}`;
         Module,
         lastSys: null, lastTools: null,
         run(prompt, sysPrompt, toolsJson, maxTokens) {
-          // (Re)init only when the system prompt or tool set changes — keeps
-          // conversation state across turns when Retain History is on.
           if (s.lastTools !== toolsJson || s.lastSys !== sysPrompt) {
             const sysPtr = allocStr(Module, sysPrompt || '');
             const toolsPtr = allocStr(Module, toolsJson || '[]');
@@ -613,7 +997,6 @@ ${toolsJson}`;
             if (initRes < 0) throw new Error(`needle_init failed (code ${initRes})`);
             s.lastSys = sysPrompt; s.lastTools = toolsJson;
           }
-
           const inPtr = allocStr(Module, prompt);
           const outCap = 65536;
           const outPtr = Module._malloc(outCap);
@@ -622,7 +1005,6 @@ ${toolsJson}`;
           Module._free(inPtr); Module._free(outPtr);
           if (res < 0) throw new Error(`needle_complete failed (code ${res})`);
           if (!json) throw new Error(`needle_complete returned empty (code ${res})`);
-
           let parsed = null;
           try { parsed = JSON.parse(json); } catch (e) {}
           const pretty = parsed ? JSON.stringify(parsed, null, 2) : json;
@@ -647,8 +1029,6 @@ ${toolsJson}`;
 
     function buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList) {
       const mode = currentMode();
-      const nativeTools = mode === 'tool' && (model.id === 'needle2' || model.id === 'tf-functiongemma-270m');
-
       if (model.id === 'tf-functiongemma-270m') {
         if (mode === 'tool') {
           return { messages: [
@@ -661,7 +1041,6 @@ ${toolsJson}`;
           { role: 'user', content: userPrompt },
         ], tools: null };
       }
-
       let system = sysPrompt || 'You are a helpful assistant.';
       let tools = null;
       if (mode === 'tool') {
@@ -700,7 +1079,7 @@ ${toolsJson}`;
           card.className = 'mcard state-' + cls;
           this.stateEl.innerHTML = text;
         },
-        setStatus(text) { this.stateEl.innerHTML = (this.stateEl.innerHTML === 'running' ? '' : '') + escHTML(text); },
+        setStatus(text) { this.stateEl.innerHTML = escHTML(text); },
         progress(pct, label) {
           this.bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
           if (label) this.stateEl.innerHTML = escHTML(label);
@@ -745,7 +1124,6 @@ ${toolsJson}`;
 
       try {
         card.setState('running', '<span class="spinner"></span> loading…');
-        const modeText = mode === 'tool' ? 'tool' : 'chat';
         let adapter;
         if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
         else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
@@ -852,21 +1230,30 @@ ${toolsJson}`;
      *  Run orchestration
      * ============================================================ */
     async function runBench() {
-      const selected = MODELS.filter(m => selectedIds.has(m.id));
-      if (!selected.length) { alert('Select at least one model.'); return; }
-
-      let toolsJsonForPrint = '—';
+      if (running) return;
+      // Validate step 1 inputs first
       try {
-        if (currentMode() === 'tool') { getToolsList(); toolsJsonForPrint = $('#toolsJson').value; }
-      } catch (e) { alert('Tools JSON error: ' + e.message); return; }
+        if (!($('#userPrompt').value.trim())) throw new Error('Enter a user prompt / request on step 1.');
+        if (currentMode() === 'tool') getToolsList();
+      } catch (e) {
+        goStep(1);
+        const errEl = $('#step1 .step-error') || (() => { const d = document.createElement('div'); d.className = 'step-error'; $('#step1 .step-nav').prepend(d); return d; })();
+        errEl.textContent = '⚠️ ' + e.message;
+        return;
+      }
+
+      const selected = MODELS.filter(m => selectedIds.has(m.id)
+        && visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelReady(m));
+      if (!selected.length) { alert('Select at least one ready model on step 2.'); goStep(2); return; }
 
       stopped = false;
+      running = true;
       currentBatchEntry = { models: selected.map(m => ({ modelId: m.id })) };
+      goStep(3);
       $('#runBtn').disabled = true;
       $('#stopBtn').disabled = false;
       $('#benchStatus').textContent = 'Running ' + selected.length + ' model(s) side-by-side…';
 
-      // Fresh grid
       const grid = $('#resultsGrid');
       grid.innerHTML = '';
       currentCards = {};
@@ -884,11 +1271,19 @@ ${toolsJson}`;
       const settled = await Promise.allSettled(tasks);
       const results = settled.map(s => s.value).filter(v => v && v.res);
 
+      // Anything that ran successfully is now downloaded / ready.
+      results.forEach(r => {
+        if (r.res.status === 'ok' && (r.m.engine === 'transformers' || r.m.engine === 'webllm')) {
+          prefs.downloaded[r.m.id] = true;
+        }
+      });
+      savePrefs();
+
+      running = false;
+      currentBatchEntry = null;
       $('#stopBtn').disabled = true;
-      $('#runBtn').disabled = false;
       $('#benchStatus').textContent = '';
 
-      // Save history (one batch entry)
       const entry = {
         datetime: new Date().toLocaleString(),
         mode: currentMode(),
@@ -900,17 +1295,12 @@ ${toolsJson}`;
         retainHistory: $('#retainHistory').checked,
         models: results.map(r => r.res),
       };
-      currentBatchEntry = null;
       runHistory.unshift(entry);
       currentBatch = 0;
       try { localStorage.setItem('slmBenchHistory', JSON.stringify(runHistory.slice(0, 200))); } catch (e) { runHistory.shift(); }
       renderHistory();
       renderSummary(entry);
     }
-
-    // Kept up to date during a run so per-iteration diffs compare against
-    // the previous batch, not the batch currently being recorded.
-    let currentBatchEntry = null;
 
     function renderSummary(entry) {
       const tbody = $('#summaryTable tbody');
@@ -1037,28 +1427,59 @@ ${toolsJson}`;
         runHistory = []; currentBatch = -1;
         renderHistory();
         renderSummary(null);
-        $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Select models above and press <b>Run Bench</b>.</p>';
+        $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p>';
       }
     };
 
     /* ============================================================
      *  Controls
      * ============================================================ */
-    $('#mode').onchange = () => { $('#toolPanel').style.display = currentMode() === 'tool' ? 'block' : 'none'; };
-    $('#clearBtn').onclick = () => { $('#userPrompt').value = ''; $('#fileInput').value = ''; $('#toolsJson').value = JSON.stringify(DEFAULT_TOOLS, null, 2); };
+    $('#mode').onchange = () => {
+      $('#toolPanel').style.display = currentMode() === 'tool' ? 'block' : 'none';
+      if (currentStep === 2) buildModelPicker();
+    };
+    $('#showNotReady').onchange = () => { prefs.showNotReady = $('#showNotReady').checked; savePrefs(); buildModelPicker(); };
+    $('#s1Next').onclick = () => {
+      const errEl = $('#step1 .step-error'); if (errEl) errEl.remove();
+      if (!$('#userPrompt').value.trim()) {
+        const d = document.createElement('div'); d.className = 'step-error';
+        d.textContent = '⚠️ Enter a user prompt / request before continuing.';
+        $('#step1 .step-nav').prepend(d);
+        return;
+      }
+      try { if (currentMode() === 'tool') getToolsList(); }
+      catch (e) {
+        const d = document.createElement('div'); d.className = 'step-error';
+        d.textContent = '⚠️ Tools JSON error: ' + e.message;
+        $('#step1 .step-nav').prepend(d);
+        return;
+      }
+      goStep(2);
+    };
+    $('#s2Back').onclick = () => goStep(1);
+    $('#s3Back').onclick = () => goStep(2);
     $('#runBtn').onclick = runBench;
+    $('#rerunBtn').onclick = runBench;
     $('#stopBtn').onclick = () => {
       stopped = true;
       $('#stopBtn').disabled = true;
       $('#benchStatus').textContent = 'Stopping…';
     };
+    $('#tabBench').onclick = () => showView('bench');
+    $('#tabSettings').onclick = () => showView('settings');
+    $('#settingsDone').onclick = () => showView('bench');
+
+    document.querySelectorAll('#stepper .step-pill').forEach(pill => {
+      pill.onclick = () => { if (!pill.disabled) goStep(+pill.dataset.step); };
+    });
 
     // defaults
     $('#toolsJson').value = JSON.stringify(DEFAULT_TOOLS, null, 2);
+    $('#showNotReady').checked = !!prefs.showNotReady;
 
-    buildModelPicker();
     loadHistory();
     init();
+    renderSettings();
   </script>
 </body>
 </html>
