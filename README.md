@@ -19,11 +19,11 @@ Everything runs locally: model weights download once from Hugging Face (or are v
 - **Capability-first flow** — step 1 asks *what kind of test* you're running; that choice drives the whole run. Models are organised by **capability** (💬 Chat, 🛠️ Tool Calling, 👁️ Vision) in both the model picker and Settings, and each capability brings its own controls, validation and scoring.
   - **💬 Chat / Instruction Following** — plain prompt → text output.
   - **🛠️ Tool Calling & Structured Output** — declare a JSON function schema and watch each model map a request to a structured call. Needle 2 and FunctionGemma use their native tool formats; the other models receive the schemas in the system prompt and are asked for strict JSON.
-  - **👁️ Vision / Image Understanding** — upload an image and pick a task (describe, detailed, objects & colors, OCR, or a custom prompt). Each vision model streams its own description. Images are processed entirely on-device.
+  - **👁️ Vision / Image Understanding** — drop in an image (or click to browse) and pick a task (describe, detailed, objects & colors, OCR, or a custom prompt). Each vision model streams its own description. Images are processed entirely on-device.
 - **Evaluation scoring** — paste expected keywords (comma/newline separated) or an expected tool-call JSON object and every run is graded **✅ pass / ⚠️ partial / ❌ fail**, per iteration and aggregated into a leaderboard. Scores are included in the CSV export.
 - **Quantitative comparison table** — wall-clock time, output length, estimated tokens, tokens/sec, score, and diff% vs. the previous run per model.
 - **Conversational vs. stateless** — toggle per-session context retention.
-- **Iterations, file context injection, run history** (localStorage), CSV export, and print-to-PDF.
+- **Iterations, file context injection** (drag-and-drop or click-to-browse), **run history** (localStorage), CSV export, and print-to-PDF.
 
 ## Model matrix
 
@@ -144,7 +144,7 @@ This is an honest comparison of each model's *native* strength (Needle and Funct
 
 ## How the vision mode works
 
-Vision mode uploads an image, decodes it to a `RawImage` in the browser, and sends it through each
+Vision mode takes an image from a drag-and-drop / click-to-browse zone, decodes it to a `RawImage` in the browser, and sends it through each
 selected vision model with `AutoProcessor` + `AutoModelForImageTextToText`. Two repo differences are
 handled automatically:
 

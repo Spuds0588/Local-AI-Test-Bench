@@ -156,9 +156,29 @@
 
     .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
+    /* Stacked containers — sibling blocks that were otherwise touching */
+    #viewBench, #viewSettings { display: flex; flex-direction: column; gap: 1.1rem; }
+    #toolPanel, #visionPanel, #evalPanel, #scoreboardSection { display: flex; flex-direction: column; gap: 0.85rem; }
+
     /* Vision input preview */
     .vision-preview { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
     .vision-preview img { max-height: 160px; max-width: 320px; border-radius: 6px; border: 1px solid var(--border); object-fit: contain; background: var(--surface2); }
+
+    /* Drop zones (image + file context) */
+    .drop-field { position: relative; }
+    .dropzone { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 0.85rem; cursor: pointer;
+      border: 1.5px dashed var(--border); border-radius: 8px; padding: 0.9rem 1rem; background: var(--surface2); font-weight: normal; transition: border-color 0.15s, background 0.15s; }
+    .dropzone:hover { border-color: var(--accent); }
+    .dropzone.dragover { border-color: var(--accent); background: #313244; box-shadow: inset 0 0 0 1px var(--accent); }
+    .dropzone .dz-icon { font-size: 1.5rem; line-height: 1; flex: none; }
+    .dropzone .dz-copy { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+    .dropzone .dz-title { font-weight: 600; font-size: 0.85rem; }
+    .dropzone .dz-sub { color: var(--muted); font-size: 0.75rem; font-weight: normal; }
+    .dropzone .dz-sub.has-file { color: var(--accent); font-weight: 600; }
+    .dropzone input[type="file"] { display: none; }
+    .dz-clear { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 1; background: var(--surface); color: var(--muted);
+      border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.5rem; font-size: 0.72rem; font-weight: 600; }
+    .dz-clear:hover { opacity: 1; color: var(--danger); border-color: var(--danger); }
 
     /* Scoring */
     .score-pass { color: var(--success); font-weight: 600; }
@@ -169,7 +189,7 @@
 
     /* Settings */
     .set-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); }
-    .set-row .grow { flex: 1; min-width: 0; }
+    .set-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
     .set-row .s-name { font-weight: 600; font-size: 0.85rem; }
     .set-row .s-meta { color: var(--muted); font-size: 0.72rem; }
     .set-list { display: flex; flex-direction: column; gap: 0.45rem; }
@@ -274,21 +294,27 @@
         </div>
 
         <div id="visionPanel" style="display:none;">
-          <div class="row">
-            <label>Image (PNG / JPEG / WebP / GIF)
-              <input type="file" id="imageInput" accept="image/*">
+          <div class="drop-field">
+            <label class="dropzone" id="imageDrop">
+              <input type="file" id="imageInput" accept="image/*" hidden>
+              <span class="dz-icon" aria-hidden="true">🖼️</span>
+              <span class="dz-copy">
+                <span class="dz-title">Drop an image here, or click to browse</span>
+                <span class="dz-sub" id="imageDropName">PNG · JPEG · WebP · GIF</span>
+              </span>
+              <span id="visionPreview" class="vision-preview"></span>
             </label>
-            <label>Vision Task
-              <select id="visionTask">
-                <option value="describe">Describe the image</option>
-                <option value="detailed">Detailed description</option>
-                <option value="objects">List objects &amp; colors</option>
-                <option value="ocr">Read the text (OCR)</option>
-                <option value="custom">Use the user prompt below</option>
-              </select>
-            </label>
+            <button type="button" class="dz-clear" id="imageClear" hidden>✕ Clear</button>
           </div>
-          <div id="visionPreview" class="vision-preview"></div>
+          <label>Vision Task
+            <select id="visionTask">
+              <option value="describe">Describe the image</option>
+              <option value="detailed">Detailed description</option>
+              <option value="objects">List objects &amp; colors</option>
+              <option value="ocr">Read the text (OCR)</option>
+              <option value="custom">Use the user prompt below</option>
+            </select>
+          </label>
           <p class="hint" style="margin:0;">
             Vision models run through <b>Transformers.js</b> (<code>AutoProcessor</code> +
             <code>AutoModelForImageTextToText</code>). Pick <b>Vision</b> as the mode, then choose vision models on step 2.
@@ -300,10 +326,16 @@
           <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
         </label>
 
-        <div class="row">
-          <label>Inject File Context (Max ~20kb)
-            <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css">
+        <div class="drop-field">
+          <label class="dropzone" id="fileDrop">
+            <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css" hidden>
+            <span class="dz-icon" aria-hidden="true">📄</span>
+            <span class="dz-copy">
+              <span class="dz-title">Drop a text file here, or click to browse</span>
+              <span class="dz-sub" id="fileDropName">.txt · .md · .csv · .json · .html · .js · .css · max ~20 KB</span>
+            </span>
           </label>
+          <button type="button" class="dz-clear" id="fileClear" hidden>✕ Clear</button>
         </div>
 
         <div id="evalPanel">
@@ -594,6 +626,7 @@ ${toolsJson}`;
     // ---- Vision state ----
     let visionImage = null;          // RawImage loaded from the selected file
     let visionImageName = '';
+    let contextFile = null;          // text file dropped/selected for context injection
 
     const VISION_TASKS = {
       describe: 'Describe this image concisely.',
@@ -1580,7 +1613,7 @@ ${toolsJson}`;
       const retain = $('#retainHistory').checked;
       const sysPrompt = $('#sysPrompt').value.trim();
       const rawPrompt = $('#userPrompt').value.trim();
-      const file = $('#fileInput').files[0];
+      const file = contextFile || $('#fileInput').files[0];
       const fileText = file ? `\n\n--- [File: ${file.name}] ---\n${await file.text()}\n--- [End File] ---\n` : '';
       const mode = currentMode();
       // Vision mode derives its prompt from the task picker (or a custom prompt).
@@ -2043,7 +2076,7 @@ ${toolsJson}`;
       // registry so a new capability is a one-line addition.
       CAPABILITY_ORDER.forEach(k => {
         const sel = CAPABILITIES[k].panel;
-        if (sel) $(sel).style.display = k === mode ? 'block' : 'none';
+        if (sel) $(sel).style.display = k === mode ? 'flex' : 'none';
       });
       const note = $('#capNote');
       if (note) {
@@ -2082,7 +2115,57 @@ ${toolsJson}`;
       renderCapabilityPicker();
       if (currentStep === 2) buildModelPicker();
     }
-    $('#imageInput').onchange = () => loadVisionImage($('#imageInput').files[0]);
+    /* Drop zones: drag-and-drop or click-to-browse for the image and context file. */
+    function setDropName(el, text, hasFile) {
+      if (!el) return;
+      el.textContent = text;
+      el.classList.toggle('has-file', !!hasFile);
+    }
+
+    function setupDropzone(zoneSel, inputSel, onFile) {
+      const zone = $(zoneSel), input = $(inputSel);
+      if (!zone || !input) return;
+      // Click-to-browse is native: the dropzone is a <label> wrapping the input.
+      input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+      ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation(); zone.classList.add('dragover');
+      }));
+      ['dragleave', 'dragend'].forEach(ev => zone.addEventListener(ev, e => {
+        e.preventDefault(); e.stopPropagation();
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('dragover');
+      }));
+      zone.addEventListener('drop', e => {
+        e.preventDefault(); e.stopPropagation(); zone.classList.remove('dragover');
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!f) return;
+        // Mirror the dropped file into the input so existing readers keep working.
+        try { const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; } catch (_) {}
+        onFile(f);
+      });
+    }
+
+    async function onImageFile(file) {
+      $('#imageClear').hidden = !file;
+      setDropName($('#imageDropName'),
+        file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : 'PNG · JPEG · WebP · GIF', !!file);
+      await loadVisionImage(file);
+    }
+
+    setupDropzone('#imageDrop', '#imageInput', onImageFile);
+    $('#imageClear').onclick = () => { $('#imageInput').value = ''; onImageFile(null); };
+
+    const FILE_DEFAULT_LABEL = '.txt · .md · .csv · .json · .html · .js · .css · max ~20 KB';
+    setupDropzone('#fileDrop', '#fileInput', file => {
+      contextFile = file;
+      $('#fileClear').hidden = false;
+      setDropName($('#fileDropName'), `${file.name} · ${(file.size / 1024).toFixed(1)} KB`, true);
+    });
+    $('#fileClear').onclick = () => {
+      contextFile = null;
+      $('#fileInput').value = '';
+      $('#fileClear').hidden = true;
+      setDropName($('#fileDropName'), FILE_DEFAULT_LABEL, false);
+    };
     $('#visionTask').onchange = () => { if ($('#visionTask').value === 'custom') $('#userPrompt').focus(); };
     $('#showNotReady').onchange = () => { prefs.showNotReady = $('#showNotReady').checked; savePrefs(); buildModelPicker(); };
     $('#s1Next').onclick = () => {
