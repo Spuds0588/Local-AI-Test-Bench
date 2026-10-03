@@ -1,2 +1,8 @@
 # Freebuff agent working directory
 .freebuff/
+
+# Tooling dependencies (npm install recreates these)
+node_modules/
+
+# Generated test artifacts (fixture images, model output dumps)
+tools/out/

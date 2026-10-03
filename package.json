@@ -1,0 +1,16 @@
+{
+  "name": "local-ai-test-bench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Client-side test bench for small language and vision models. Tooling only — the bench itself is the static index.html.",
+  "type": "module",
+  "scripts": {
+    "check": "node tools/check-static.mjs",
+    "test": "node tools/test-scoring.mjs",
+    "test:vision": "node tools/test-vision.mjs",
+    "test:all": "npm run check && npm test && npm run test:vision"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "4.2.0"
+  }
+}

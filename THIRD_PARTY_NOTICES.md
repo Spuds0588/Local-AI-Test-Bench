@@ -36,6 +36,10 @@ a static GitHub Pages site can serve them directly.
 | FunctionGemma-270M-it | `onnx-community/functiongemma-270m-it-ONNX` | Gemma terms |
 | Qwen3-0.6B / Qwen2.5-0.5B-Instruct | `onnx-community/Qwen*-ONNX`, `mlc-ai/Qwen*-MLC` | Qwen license (Apache-2.0 based) |
 | Gemma-3-1B-it / Gemma-2-2B-it | `onnx-community/gemma-3-1b-it-ONNX`, `mlc-ai/gemma-*-MLC` | Gemma terms |
+| SmolVLM-256M / 500M / 2B-Instruct | `HuggingFaceTB/SmolVLM-256M-Instruct`, `HuggingFaceTB/SmolVLM-500M-Instruct`, `HuggingFaceTB/SmolVLM-Instruct` | Apache-2.0 |
+| LFM2.5-VL-450M (Liquid AI) | `onnx-community/LFM2.5-VL-450M-ONNX` | Liquid AI LFM license |
+| Moondream2 | `Xenova/moondream2` | Apache-2.0 |
+| Phi-3.5-vision-instruct (Microsoft) | `onnx-community/Phi-3.5-vision-instruct` | MIT |
 
 Model weights are not redistributed in this repository. They are fetched from
 the Hugging Face Hub at runtime and cached by the browser. Review each model's

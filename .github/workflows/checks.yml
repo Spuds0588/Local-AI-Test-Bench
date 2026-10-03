@@ -1,0 +1,33 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # `npm install` (not `ci`) so the workflow works whether or not a
+      # lockfile is committed.
+      - name: Install tooling
+        run: npm install --no-audit --no-fund
+
+      - name: Static validation
+        run: npm run check
+
+      - name: Scoring tests
+        run: npm test

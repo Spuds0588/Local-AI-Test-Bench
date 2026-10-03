@@ -79,6 +79,36 @@
     .btn-danger { color: var(--danger); }
     .btn-primary { font-size: 0.95rem; padding: 0.7rem 1.5rem; }
 
+    /* Capability picker (step 1) + capability sections */
+    .cap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0.7rem; }
+    .cap-card { display: flex; align-items: flex-start; gap: 0.7rem; text-align: left; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem 0.9rem; color: var(--text); font-weight: normal; cursor: pointer; }
+    .cap-card:hover { opacity: 1; border-color: var(--accent); }
+    .cap-card.active { border-color: var(--accent); background: #313244; box-shadow: inset 0 0 0 1px var(--accent); }
+    .cap-card .cap-icon { font-size: 1.4rem; line-height: 1; }
+    .cap-card .cap-copy { display: flex; flex-direction: column; gap: 0.2rem; }
+    .cap-card .cap-name { font-weight: 700; font-size: 0.9rem; }
+    .cap-card .cap-blurb { color: var(--muted); font-size: 0.75rem; font-weight: normal; }
+    .cap-card .cap-count { color: var(--accent); font-size: 0.72rem; font-weight: 600; }
+    .cap-section { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .cap-section.active { border-color: rgba(137,180,250,.6); }
+    .cap-section.inactive { opacity: 0.92; }
+    .cap-section > .cap-head { background: var(--surface2); }
+    .cap-section > summary { list-style: none; cursor: pointer; }
+    .cap-section > summary::-webkit-details-marker { display: none; }
+    .cap-section > summary > .cap-head::before { content: '▸'; color: var(--muted); margin-right: 0.1rem; }
+    .cap-section[open] > summary > .cap-head::before { content: '▾'; }
+    .cap-body { padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.6rem; }
+    .cap-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; flex-wrap: wrap; }
+    .cap-head .cap-title { font-weight: 700; font-size: 0.88rem; }
+    .cap-head .cap-sub { color: var(--muted); font-size: 0.72rem; }
+    .cap-head > .badge, .cap-head > button { margin-left: auto; }
+    .cap-badges { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; margin-top: 0.15rem; }
+    .cap-badge { font-size: 0.62rem; padding: 0.05rem 0.4rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+    .model-opt.cap-locked { opacity: 0.7; }
+    .model-opt.cap-locked .m-label { color: var(--muted); }
+    .cap-lock-note { color: var(--warn); }
+    .set-row .cap-badges { margin-top: 0.2rem; }
+
     /* Model picker (step 2) */
     .pick-head { display: flex; flex-direction: column; gap: 0.5rem; }
     .pick-banner { font-size: 0.8rem; color: var(--warn); background: rgba(249,226,175,.08); border: 1px solid rgba(249,226,175,.3); border-radius: 6px; padding: 0.5rem 0.75rem; }
@@ -125,6 +155,17 @@
     .metric b { color: var(--text); font-weight: 600; }
 
     .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+
+    /* Vision input preview */
+    .vision-preview { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+    .vision-preview img { max-height: 160px; max-width: 320px; border-radius: 6px; border: 1px solid var(--border); object-fit: contain; background: var(--surface2); }
+
+    /* Scoring */
+    .score-pass { color: var(--success); font-weight: 600; }
+    .score-partial { color: var(--warn); font-weight: 600; }
+    .score-fail { color: var(--danger); font-weight: 600; }
+    .score-bar { display: inline-block; vertical-align: middle; width: 70px; height: 6px; background: #313244; border-radius: 3px; overflow: hidden; margin-right: 0.4rem; }
+    .score-bar > div { height: 100%; background: var(--accent); }
 
     /* Settings */
     .set-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.6rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface2); }
@@ -197,14 +238,15 @@
       <!-- Step 1 · Configure -->
       <section id="step1" class="step card active">
         <h2>1 · What kind of test?</h2>
+        <p class="hint" style="margin:0;">Pick the capability you're testing. This drives which models appear on step 2 and how the run is graded.</p>
+
+        <!-- Test type is the primary axis. `#mode` keeps the current capability
+             for the existing engine/run logic; the cards write to it. -->
+        <input type="hidden" id="mode" value="chat">
+        <div id="capabilityGrid" class="cap-grid"></div>
+        <p id="capNote" class="hint" style="margin:0;"></p>
 
         <div class="row">
-          <label>Mode
-            <select id="mode">
-              <option value="chat">💬 Chat / Instruction Following</option>
-              <option value="tool">🛠️ Tool Calling &amp; Structured Output</option>
-            </select>
-          </label>
           <label>Max Tokens
             <input type="number" id="maxTokens" value="256" min="16" max="2048">
           </label>
@@ -231,6 +273,29 @@
           </p>
         </div>
 
+        <div id="visionPanel" style="display:none;">
+          <div class="row">
+            <label>Image (PNG / JPEG / WebP / GIF)
+              <input type="file" id="imageInput" accept="image/*">
+            </label>
+            <label>Vision Task
+              <select id="visionTask">
+                <option value="describe">Describe the image</option>
+                <option value="detailed">Detailed description</option>
+                <option value="objects">List objects &amp; colors</option>
+                <option value="ocr">Read the text (OCR)</option>
+                <option value="custom">Use the user prompt below</option>
+              </select>
+            </label>
+          </div>
+          <div id="visionPreview" class="vision-preview"></div>
+          <p class="hint" style="margin:0;">
+            Vision models run through <b>Transformers.js</b> (<code>AutoProcessor</code> +
+            <code>AutoModelForImageTextToText</code>). Pick <b>Vision</b> as the mode, then choose vision models on step 2.
+            The image never leaves your browser.
+          </p>
+        </div>
+
         <label>User Prompt / Request
           <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
         </label>
@@ -239,6 +304,18 @@
           <label>Inject File Context (Max ~20kb)
             <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css">
           </label>
+        </div>
+
+        <div id="evalPanel">
+          <label>Expected Output / Keywords <span class="hint">(optional — turns on scoring)</span>
+            <textarea id="expectedOutput" rows="3" spellcheck="false"
+              placeholder="e.g.  red, square, green   —   or a tool-call JSON: {"function": "set_lights", "arguments": {"room": "kitchen", "on": true}}"></textarea>
+          </label>
+          <p class="hint" style="margin:0;">
+            Comma/newline-separated keywords are matched case-insensitively against each output; a leading
+            <code>{</code> is parsed as an expected tool call and scored function-then-arguments. Each run is graded
+            <b>✅ pass</b> / <b>⚠️ partial</b> / <b>❌ fail</b> and aggregated in the scoreboard below.
+          </p>
         </div>
 
         <div class="step-nav">
@@ -277,10 +354,22 @@
         <div class="table-container">
           <table id="summaryTable">
             <thead>
-              <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
+              <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Score</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
             </thead>
-            <tbody><tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
+            <tbody><tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
           </table>
+        </div>
+
+        <div id="scoreboardSection" style="display:none;">
+          <h2>Evaluation Scoreboard <span class="hint">(aggregated across all scored runs)</span></h2>
+          <div class="table-container">
+            <table id="scoreboardTable">
+              <thead>
+                <tr><th>Model</th><th>Runs</th><th>Pass</th><th>Partial</th><th>Fail</th><th>Mean Score</th><th>Score</th></tr>
+              </thead>
+              <tbody id="scoreboardBody"></tbody>
+            </table>
+          </div>
         </div>
 
         <div id="printWrap">
@@ -322,11 +411,13 @@
     <div id="viewSettings" style="display:none;">
       <section class="card">
         <h2>Displayed Models <span class="hint">(which models appear in the bench picker)</span></h2>
+        <p class="hint" style="margin:0;">Grouped by capability. Each model is filed under its primary capability; badges show every capability it supports.</p>
         <div class="set-list" id="displayList"></div>
       </section>
 
       <section class="card">
         <h2>Downloads <span class="hint">(pre-fetch weights so models are ready to test — only ready models appear in the bench)</span></h2>
+        <p class="hint" style="margin:0;">Weights grouped by capability, so you can fetch everything for the test type you're running.</p>
         <div class="set-list" id="downloadList"></div>
       </section>
 
@@ -352,7 +443,52 @@
       needle:       { name: 'Needle 2 (WASM)',          color: '#a6e3a1' },
       transformers: { name: 'Transformers.js (ONNX)',   color: '#f9e2af' },
       webllm:       { name: 'WebLLM (WebGPU)',          color: '#f38ba8' },
+      vision:       { name: 'Transformers.js (Vision)', color: '#cba6f7' },
     };
+
+    /* Capabilities are the *primary* way models are organised in this bench:
+       the tester picks the capability under test, and that choice drives which
+       models are offered and how they are grouped, both in the picker (step 2)
+       and in Settings. Each model's `modes` array lists the capabilities it
+       belongs to. Add a new entry here to introduce another test type (e.g. a
+       dedicated "agentic / Needle" capability) without touching the pickers. */
+    const CAPABILITIES = {
+      chat:   { icon: '💬', name: 'Chat / Instruction Following',
+                blurb: 'Free-form answers, reasoning and formatting.',
+                panel: null },
+      tool:   { icon: '🛠️', name: 'Tool Calling & Structured Output',
+                blurb: 'Must emit one JSON tool call. Needle 2 and FunctionGemma use native tool formats.',
+                panel: '#toolPanel' },
+      vision: { icon: '👁️', name: 'Vision / Image Understanding',
+                blurb: 'Image + text in. Needs an uploaded image and a Transformers.js vision model.',
+                panel: '#visionPanel' },
+    };
+    const CAPABILITY_ORDER = ['chat', 'tool', 'vision'];
+    // The capability a model is filed under when lists are grouped (its first
+    // declared mode). Every model still advertises *all* its modes as badges.
+    function primaryCapability(m) {
+      const modes = m.modes || ['chat', 'tool'];
+      return CAPABILITY_ORDER.find(c => modes.includes(c)) || 'chat';
+    }
+    function capabilityLabel(key) {
+      const c = CAPABILITIES[key];
+      return c ? `${c.icon} ${c.name}` : key;
+    }
+    function capabilityBadges(m) {
+      const modes = m.modes || ['chat', 'tool'];
+      return `<span class="cap-badges">${modes.map(k => {
+        const c = CAPABILITIES[k];
+        return `<span class="cap-badge" title="${escHTML(c ? c.name : k)}">${c ? c.icon : ''} ${escHTML(k)}</span>`;
+      }).join('')}</span>`;
+    }
+    function capabilitySectionHead(key, sub) {
+      const c = CAPABILITIES[key];
+      const head = document.createElement('div');
+      head.className = 'cap-head';
+      head.innerHTML = `<span class="cap-title">${c ? c.icon : ''} ${escHTML(c ? c.name : key)}</span>
+        <span class="cap-sub">${escHTML(sub)}</span>`;
+      return head;
+    }
 
     const MODELS = [
       // ---- Chrome built-in (Gemini Nano) ----
@@ -375,6 +511,17 @@
       { id: 'wl-gemma2-2b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', note: 'Google · Gemma terms' },
       { id: 'wl-smollm2-1.7b',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', note: 'Hugging Face' },
       { id: 'wl-smollm2-360m',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', note: 'Hugging Face' },
+
+      // ---- Vision / image understanding (Transformers.js, image-text-to-text) ----
+      // Verified against the Hugging Face Hub API (repos, ONNX file names and
+      // real byte sizes). `dtype` is the ONNX quantisation actually used;
+      // `order` is the argument order this repo's processor expects.
+      { id: 'vl-smolvlm-256m',  engine: 'vision', modes: ['vision'], repo: 'HuggingFaceTB/SmolVLM-256M-Instruct', label: 'SmolVLM-256M-Instruct',  params: '256M', size: '~265MB', note: 'Hugging Face · smallest VLM',  dtype: 'q4',    order: 'text-image' },
+      { id: 'vl-smolvlm-500m',  engine: 'vision', modes: ['vision'], repo: 'HuggingFaceTB/SmolVLM-500M-Instruct', label: 'SmolVLM-500M-Instruct',  params: '500M', size: '~485MB', note: 'Hugging Face · balanced',      dtype: 'q4',    order: 'text-image' },
+      { id: 'vl-lfm25-450m',    engine: 'vision', modes: ['vision'], repo: 'onnx-community/LFM2.5-VL-450M-ONNX',   label: 'LFM2.5-VL-450M',        params: '450M', size: '~385MB', note: 'Liquid AI · hybrid VLM',      dtype: 'q4f16', order: 'image-text' },
+      { id: 'vl-smolvlm-2b',    engine: 'vision', modes: ['vision'], repo: 'HuggingFaceTB/SmolVLM-Instruct',      label: 'SmolVLM-Instruct (2B)', params: '2B',   size: '~1.4GB', note: 'Hugging Face · best quality', dtype: 'q4f16', order: 'text-image', needsWebGPU: true },
+      { id: 'vl-moondream2',    engine: 'vision', modes: ['vision'], repo: 'Xenova/moondream2',                   label: 'Moondream2',            params: '1.8B', size: '~1.5GB', note: 'moondream · no chat template', dtype: 'q4', order: 'image-text', needsWebGPU: true, experimental: 'Transformers.js has no `moondream1` model class yet — load is expected to fail here.' },
+      { id: 'vl-phi35-vision',  engine: 'vision', modes: ['vision'], repo: 'onnx-community/Phi-3.5-vision-instruct', label: 'Phi-3.5-vision-instruct', params: '4.2B', size: '~2.5GB', note: 'Microsoft · heaviest',    dtype: 'q4f16', order: 'text-image', needsWebGPU: true },
     ];
 
     const DEFAULT_TOOLS = [
@@ -444,6 +591,38 @@ ${toolsJson}`;
       catch (e) { console.warn('Could not persist prefs:', e); }
     }
 
+    // ---- Vision state ----
+    let visionImage = null;          // RawImage loaded from the selected file
+    let visionImageName = '';
+
+    const VISION_TASKS = {
+      describe: 'Describe this image concisely.',
+      detailed: 'Describe this image in detail, including objects, their positions, colors and any text.',
+      objects:  'List the main objects in this image and their colors, as a short comma-separated list.',
+      ocr:      'Read and transcribe all visible text in this image. If there is no text, reply exactly: no text.',
+    };
+    function visionPrompt() {
+      const task = $('#visionTask').value;
+      if (task === 'custom') return $('#userPrompt').value.trim();
+      const custom = $('#userPrompt').value.trim();
+      return custom ? custom : VISION_TASKS[task];
+    }
+
+    async function loadVisionImage(file) {
+      const host = $('#visionPreview');
+      if (!file) { visionImage = null; visionImageName = ''; host.innerHTML = ''; return; }
+      const url = URL.createObjectURL(file);
+      host.innerHTML = `<img alt="selected image" src="${url}"><span class="hint">${escHTML(file.name)} · ${(file.size / 1024).toFixed(0)} KB</span>`;
+      try {
+        const tf = await getTf();
+        visionImage = await tf.RawImage.fromBlob(file);
+        visionImageName = file.name;
+      } catch (e) {
+        visionImage = null;
+        host.innerHTML += `<span class="hint" style="color:var(--danger)">Could not decode image: ${escHTML(e.message)}</span>`;
+      }
+    }
+
     let builtinStatus = 'missing';   // 'ready' | 'missing' | 'downloading' | 'error'
     let webgpuAvailable = !!navigator.gpu;
     let downloading = {};            // modelId -> true while in-flight
@@ -456,6 +635,13 @@ ${toolsJson}`;
       if (m.engine === 'builtin') return builtinStatus === 'ready';
       return false;
     }
+    // Vision models run in the same Transformers.js runtime, but need WebGPU
+    // for anything beyond the smallest checkpoints — otherwise the WASM heap
+    // runs out. `needsWebGPU` marks those, and the picker flags them.
+    function visionRunnable(m) {
+      if (m.engine !== 'vision') return true;
+      return !m.needsWebGPU || webgpuAvailable;
+    }
     function modelReady(m) {
       if (inherentlyReady(m)) return true;
       return !!prefs.downloaded[m.id];
@@ -463,6 +649,7 @@ ${toolsJson}`;
     function engineAvailable(m) {
       if (m.engine === 'builtin') return builtinStatus !== 'missing' && builtinStatus !== 'error';
       if (m.engine === 'webllm') return webgpuAvailable;
+      if (m.engine === 'vision') return visionRunnable(m);
       return true;
     }
     function applicableToMode(m) {
@@ -496,10 +683,13 @@ ${toolsJson}`;
         const tfCache = await caches.open('transformers-cache');
         const tfUrls = new Set((await tfCache.keys()).map(r => r.url));
         for (const m of MODELS) {
-          if (m.engine !== 'transformers') continue;
-          // The big weight file is the decisive "downloaded" marker.
+          if (m.engine !== 'transformers' && m.engine !== 'vision') continue;
+          // The big weight file is the decisive "downloaded" marker. Text
+          // models ship onnx/model*.onnx; vision models split into a
+          // vision_encoder + decoder (plus embed_tokens), so match either.
           const base = `https://huggingface.co/${m.repo}/resolve/main/`;
-          const hasWeights = [...tfUrls].some(u => u.startsWith(base + 'onnx/model'));
+          const hasWeights = [...tfUrls].some(u =>
+            u.startsWith(base + 'onnx/model') || u.startsWith(base + 'onnx/vision_encoder'));
           if (hasWeights) markReady(m.id);
         }
       } catch (e) { /* no-op: cache unavailable */ }
@@ -557,14 +747,11 @@ ${toolsJson}`;
     function buildModelPicker() {
       const host = $('#modelGroups');
       host.innerHTML = '';
+      const mode = currentMode();
+      const showAll = $('#showNotReady').checked;
 
-      // Group by engine, split ready vs not-ready, respect filters.
-      const groups = {};
-      MODELS.forEach(m => {
-        if (!visibleModel(m) || !applicableToMode(m) || !engineAvailable(m)) return;
-        (groups[m.engine] = groups[m.engine] || []).push(m);
-      });
-
+      // Summary is scoped to the capability being tested (the models that can
+      // actually run right now), so the counts stay meaningful.
       let readyCount = 0, hiddenCount = 0, unavailableCount = 0;
       const unavailable = [];
       MODELS.forEach(m => {
@@ -572,38 +759,92 @@ ${toolsJson}`;
         if (!engineAvailable(m)) { unavailableCount++; unavailable.push(ENGINES[m.engine].name); return; }
         if (modelReady(m)) readyCount++; else hiddenCount++;
       });
-      const showAll = $('#showNotReady').checked;
+      const selectedRunnable = [...selectedIds].filter(id =>
+        MODELS.some(m => m.id === id && visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelReady(m))).length;
       $('#pickSummary').textContent =
-        `${readyCount} ready · ${hiddenCount} not downloaded yet` +
+        `Testing ${capabilityLabel(mode)} · ${readyCount} ready · ${hiddenCount} not downloaded yet` +
         (unavailableCount ? ` · ${unavailableCount} hidden (${[...new Set(unavailable)].join(', ')})` : '') +
-        ` · ${[...selectedIds].filter(id => MODELS.some(m => m.id === id && visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelReady(m))).length} selected`;
+        ` · ${selectedRunnable} selected`;
 
-      Object.entries(groups).forEach(([eng, models]) => {
-        const ready = models.filter(modelReady);
-        const notReady = models.filter(m => !modelReady(m));
-        const g = document.createElement('div');
-        g.className = 'engine-group';
-        g.innerHTML = `<div class="eg-head"><span style="color:${ENGINES[eng].color}">■</span> ${ENGINES[eng].name}
-          <span class="eg-status">${ready.length} ready / ${notReady.length} to download</span></div>`;
+      // Capability sections. The one under test comes first and is open and
+      // selectable; the others are collapsed, read-only previews (their
+      // downloads still work so you can pre-fetch) with a one-click switch.
+      const order = [mode, ...CAPABILITY_ORDER.filter(k => k !== mode)];
+      order.forEach(capKey => {
+        const cap = CAPABILITIES[capKey];
+        if (!cap) return;
+        const isTest = capKey === mode;
+        const inCap = MODELS.filter(m => visibleModel(m) && engineAvailable(m) && (m.modes || []).includes(capKey));
 
-        const grid = document.createElement('div');
-        grid.className = 'eg-models';
+        const section = document.createElement(isTest ? 'div' : 'details');
+        section.className = 'cap-section' + (isTest ? ' active' : ' inactive');
+        if (!isTest) section.open = false;
 
-        if (!ready.length && (!showAll || !notReady.length)) {
-          grid.innerHTML = `<div class="eg-sub">No ready models from this engine yet.</div>`;
+        const readyN = inCap.filter(modelReady).length;
+        const head = document.createElement('div');
+        head.className = 'cap-head';
+        head.innerHTML = `<span class="cap-title">${cap.icon} ${escHTML(cap.name)}</span>
+          <span class="cap-sub">${inCap.length} model${inCap.length === 1 ? '' : 's'} · ${readyN} ready</span>`;
+        if (isTest) {
+          const tag = document.createElement('span');
+          tag.className = 'badge ok';
+          tag.textContent = 'testing now';
+          head.appendChild(tag);
+        } else {
+          const sw = document.createElement('button');
+          sw.type = 'button';
+          sw.className = 'btn-small btn-secondary';
+          sw.textContent = 'Test this instead';
+          sw.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); setCapability(capKey); };
+          head.appendChild(sw);
         }
-        ready.forEach(m => grid.appendChild(modelRow(m, true)));
-        if (showAll) {
-          if (ready.length && notReady.length) grid.innerHTML += `<div class="eg-sub">— Not downloaded yet —</div>`;
-          notReady.forEach(m => grid.appendChild(modelRow(m, false)));
+        if (isTest) section.appendChild(head);
+        else { const sum = document.createElement('summary'); sum.appendChild(head); section.appendChild(sum); }
+
+        const body = document.createElement('div');
+        body.className = 'cap-body';
+
+        if (!inCap.length) {
+          body.innerHTML = `<div class="eg-sub">No models available for this capability on this device.</div>`;
+        } else {
+          // Within a capability, keep the engine colour-coding as sub-groups.
+          const byEngine = {};
+          inCap.forEach(m => (byEngine[m.engine] = byEngine[m.engine] || []).push(m));
+          Object.entries(byEngine).forEach(([eng, models]) => {
+            const consistent = models.filter(modelReady);
+            const notReady = models.filter(m => !modelReady(m));
+            const g = document.createElement('div');
+            g.className = 'engine-group';
+            g.innerHTML = `<div class="eg-head"><span style="color:${ENGINES[eng].color}">■</span> ${ENGINES[eng].name}
+              <span class="eg-status">${consistent.length} ready / ${notReady.length} to download</span></div>`;
+            if (eng === 'vision' && !webgpuAvailable) {
+              g.querySelector('.eg-status').textContent = `${consistent.length} ready / ${notReady.length} to download · WebGPU-only models hidden`;
+            }
+            const grid = document.createElement('div');
+            grid.className = 'eg-models';
+            if (!consistent.length && (!showAll || !notReady.length)) {
+              grid.innerHTML = `<div class="eg-sub">No ready models from this engine yet.</div>`;
+            }
+            consistent.forEach(m => grid.appendChild(modelRow(m, true, isTest)));
+            if (showAll) {
+              if (consistent.length && notReady.length) grid.innerHTML += `<div class="eg-sub">— Not downloaded yet —</div>`;
+              notReady.forEach(m => grid.appendChild(modelRow(m, false, isTest)));
+            }
+            g.appendChild(grid);
+            body.appendChild(g);
+          });
         }
-        g.appendChild(grid);
-        host.appendChild(g);
+        section.appendChild(body);
+        host.appendChild(section);
       });
 
-      if (!Object.keys(groups).length) {
-        host.innerHTML = `<p class="hint" style="margin:0;">No models match this test yet.
-          ${hiddenCount ? 'Open <b>Settings → Downloads</b> to fetch weights, or tick “Show models that aren’t downloaded yet” below.' : ''}</p>`;
+      if (!MODELS.some(m => visibleModel(m) && applicableToMode(m) && engineAvailable(m))) {
+        const p = document.createElement('p');
+        p.className = 'hint';
+        p.style.margin = '0';
+        p.textContent = `No models can run ${CAPABILITIES[mode] ? CAPABILITIES[mode].name : mode} on this device yet.` +
+          (hiddenCount ? ' Open Settings → Downloads to fetch weights, or tick “Show models that aren’t downloaded yet”.' : '');
+        host.appendChild(p);
       }
       if (hiddenCount && !showAll) {
         const banner = document.createElement('div');
@@ -620,17 +861,24 @@ ${toolsJson}`;
       persistSelection();
     }
 
-    function modelRow(m, ready) {
+    function modelRow(m, ready, runnable = true) {
       const l = document.createElement('label');
-      l.className = 'model-opt' + (ready ? '' : ' not-ready');
+      l.className = 'model-opt' + (ready ? '' : ' not-ready') + (runnable ? '' : ' cap-locked');
       const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.checked = selectedIds.has(m.id); cb.disabled = !ready;
-      cb.onchange = () => { cb.checked ? selectedIds.add(m.id) : selectedIds.delete(m.id); persistSelection(); };
+      cb.type = 'checkbox';
+      // A model from another capability is shown for reference only — its
+      // checkbox is disabled so a mismatched model can never be run.
+      cb.checked = runnable && selectedIds.has(m.id);
+      cb.disabled = !ready || !runnable;
+      cb.onchange = () => { if (cb.checked) selectedIds.add(m.id); else selectedIds.delete(m.id); persistSelection(); };
       l.appendChild(cb);
       const span = document.createElement('span');
       span.style.minWidth = '0';
       span.innerHTML = `<span class="m-label">${escHTML(m.label)}</span>
-        <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>`;
+        <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>
+        ${capabilityBadges(m)}
+        ${runnable ? '' : '<div class="m-meta cap-lock-note">Switch the test type above to run this model.</div>'}
+        ${m.experimental ? `<div class="m-meta" style="color:var(--warn)">⚠️ experimental — ${escHTML(m.experimental)}</div>` : ''}`;
       if (!ready) {
         const dl = document.createElement('div');
         dl.className = 'm-dl';
@@ -668,46 +916,56 @@ ${toolsJson}`;
      *  Settings view
      * ============================================================ */
     function renderSettings() {
-      // Displayed models
+      // Displayed models — grouped by the capability each model is filed under.
       const dl = $('#displayList');
       dl.innerHTML = '';
-      MODELS.forEach(m => {
-        const row = document.createElement('div');
-        row.className = 'set-row';
-        const info = document.createElement('div');
-        info.className = 'grow';
-        info.innerHTML = `<div class="s-name">${escHTML(m.label)}</div>
-          <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)}</div>`;
-        row.appendChild(info);
-        const sw = document.createElement('label');
-        sw.className = 'switch';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox'; cb.checked = !prefs.hidden.includes(m.id);
-        cb.onchange = () => {
-          if (cb.checked) prefs.hidden = prefs.hidden.filter(x => x !== m.id);
-          else if (!prefs.hidden.includes(m.id)) prefs.hidden.push(m.id);
-          savePrefs();
-        };
-        const track = document.createElement('span'); track.className = 'track';
-        sw.appendChild(cb); sw.appendChild(track);
-        row.appendChild(sw);
-        dl.appendChild(row);
-      });
       const controls = document.createElement('div');
       controls.className = 'row wrap';
       controls.innerHTML = `<button class="btn-small btn-secondary" id="showAllModels">Show all</button>
         <button class="btn-small btn-secondary" id="hideAllModels">Hide all</button>`;
-      dl.prepend(controls);
+      dl.appendChild(controls);
+      CAPABILITY_ORDER.forEach(capKey => {
+        const capModels = MODELS.filter(m => primaryCapability(m) === capKey);
+        if (!capModels.length) return;
+        dl.appendChild(capabilitySectionHead(capKey, `${capModels.length} model${capModels.length === 1 ? '' : 's'}`));
+        capModels.forEach(m => {
+          const row = document.createElement('div');
+          row.className = 'set-row';
+          const info = document.createElement('div');
+          info.className = 'grow';
+          info.innerHTML = `<div class="s-name">${escHTML(m.label)}</div>
+            <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)} ${capabilityBadges(m)}</div>`;
+          row.appendChild(info);
+          const sw = document.createElement('label');
+          sw.className = 'switch';
+          const cb = document.createElement('input');
+          cb.type = 'checkbox'; cb.checked = !prefs.hidden.includes(m.id);
+          cb.onchange = () => {
+            if (cb.checked) prefs.hidden = prefs.hidden.filter(x => x !== m.id);
+            else if (!prefs.hidden.includes(m.id)) prefs.hidden.push(m.id);
+            savePrefs();
+          };
+          const track = document.createElement('span'); track.className = 'track';
+          sw.appendChild(cb); sw.appendChild(track);
+          row.appendChild(sw);
+          dl.appendChild(row);
+        });
+      });
       $('#showAllModels').onclick = () => { prefs.hidden = []; savePrefs(); renderSettings(); };
       $('#hideAllModels').onclick = () => { prefs.hidden = MODELS.map(m => m.id); savePrefs(); renderSettings(); };
 
-      // Downloads
+      // Downloads — same capability grouping so weights are easy to find.
       const dll = $('#downloadList');
       dll.innerHTML = '';
-      MODELS.forEach(m => {
+      CAPABILITY_ORDER.forEach(capKey => {
+        const capModels = MODELS.filter(m => primaryCapability(m) === capKey);
+        if (!capModels.length) return;
+        dll.appendChild(capabilitySectionHead(capKey, `${capModels.length} model${capModels.length === 1 ? '' : 's'}`));
+        capModels.forEach(m => {
         const row = document.createElement('div');
         row.className = 'set-row';
         const noDownload = m.engine === 'needle' || m.engine === 'builtin';
+        const blocked = m.engine === 'vision' && !visionRunnable(m);
         const ready = modelReady(m);
         const state = downloading[m.id] ? 'downloading' : (ready ? 'ready' : 'missing');
         row.innerHTML = `<div class="grow"><div class="s-name">${escHTML(m.label)}</div>
@@ -719,6 +977,9 @@ ${toolsJson}`;
           status.innerHTML = builtinOk
             ? `<span class="badge ok">${m.engine === 'needle' ? 'vendored · always ready' : 'built-in · no download'}</span>`
             : `<span class="badge warn">not available in this browser</span>`;
+          row.appendChild(status);
+        } else if (blocked) {
+          status.innerHTML = `<span class="badge warn">needs WebGPU (unavailable here)</span>`;
           row.appendChild(status);
         } else if (state === 'ready') {
           status.innerHTML = `<span class="badge ok">ready ✓</span>`;
@@ -734,6 +995,8 @@ ${toolsJson}`;
         btn.className = 'btn-small btn-secondary';
         if (noDownload) {
           btn.disabled = true; btn.textContent = m.engine === 'needle' ? 'Vendored in repo' : 'Browser API';
+        } else if (blocked) {
+          btn.disabled = true; btn.textContent = 'Needs WebGPU';
         } else {
           const barDiv = bar.querySelector('div');
           registerPaint(m.id, s => {
@@ -756,6 +1019,7 @@ ${toolsJson}`;
         }
         row.appendChild(btn);
         dll.appendChild(row);
+        });
       });
     }
 
@@ -808,7 +1072,25 @@ ${toolsJson}`;
       setDl(modelId, { pct: 0, label: 'starting…', done: false, error: null, interrupted: false });
       paintDl(modelId);
       try {
-        if (m.engine === 'transformers') {
+        if (m.engine === 'vision') {
+          const tf = await getTf();
+          const progressCb = data => {
+            if (data.status === 'progress') {
+              setDl(modelId, { pct: Math.round(data.progress), label: `${Math.round(data.loaded / 1048576) || 0}MB / ${Math.round(data.total / 1048576) || '?'}MB` });
+            } else if (data.status === 'initiate') setDl(modelId, { label: 'fetching ' + (data.file || '') });
+            else if (data.status === 'done') setDl(modelId, { pct: 100, label: 'cached ✓' });
+            paintDl(modelId);
+          };
+          // Only the smallest vision checkpoints fit the WASM heap; the rest
+          // require WebGPU (they are hidden from the picker without it).
+          const device = m.needsWebGPU ? 'webgpu' : 'wasm';
+          const processor = await tf.AutoProcessor.from_pretrained(m.repo, { progress_callback: progressCb });
+          const model = await tf.AutoModelForImageTextToText.from_pretrained(m.repo, {
+            dtype: m.dtype, device, progress_callback: progressCb,
+          });
+          try { processor.dispose && processor.dispose(); } catch (e) {}
+          try { model.dispose && model.dispose(); } catch (e) {}
+        } else if (m.engine === 'transformers') {
           const tf = await getTf();
           const useWebGPU = webgpuAvailable && m.params !== '135M' && m.params !== '360M';
           const device = useWebGPU ? 'webgpu' : 'wasm';
@@ -896,6 +1178,7 @@ ${toolsJson}`;
       // Recover readiness from the browser's real caches, then reflect any
       // restored in-flight/interrupted download state in the UI.
       try { await reconcileCacheReadiness(); } catch (e) {}
+      renderCapabilityPicker();
       buildModelPicker();
       renderSettings();
     }
@@ -1046,6 +1329,92 @@ ${toolsJson}`;
       return s;
     }
 
+    /* ---- Vision / image-text-to-text (Transformers.js) ----
+       Uses AutoProcessor + AutoModelForImageTextToText. Repos differ in two
+       ways, both captured on the model entry:
+         - `order`: some processors take (text, image), others (image, text);
+           we try the declared order first and fall back to the other.
+         - Repos with no chat template (moondream2) need the prompt built by
+           hand, in the `role\n<image>text\n` form LFM2.5-VL uses. */
+    async function adapterVision(model, card) {
+      let s = sessions[model.id];
+      if (s) return s;
+      const tf = await getTf();
+      const progressCb = data => {
+        if (!card) return;
+        if (data.status === 'progress') card.progress(data.progress, (data.file || '') + ' ' + (data.loaded ? Math.round(data.loaded / 1048576) + 'MB' : ''));
+        else if (data.status === 'initiate') card.setStatus('Downloading ' + (data.file || '') + '…');
+        else if (data.status === 'done') card.setStatus('Downloaded ✓');
+      };
+      const device = model.needsWebGPU ? 'webgpu' : 'wasm';
+      card.setStatus(`Loading processor + model (${device}/${model.dtype || 'q4'})…`);
+
+      const processor = await tf.AutoProcessor.from_pretrained(model.repo, { progress_callback: progressCb });
+      const lm = await tf.AutoModelForImageTextToText.from_pretrained(model.repo, {
+        dtype: model.dtype || 'q4', device, progress_callback: progressCb,
+      });
+
+      async function buildInputs(image, userPrompt, sysPrompt) {
+        const messages = [];
+        if (sysPrompt) messages.push({ role: 'system', content: sysPrompt });
+        messages.push({ role: 'user', content: [{ type: 'image' }, { type: 'text', text: userPrompt }] });
+        let prompt;
+        try {
+          prompt = processor.apply_chat_template(messages, { add_generation_prompt: true });
+        } catch (e) {
+          const bos = (processor.tokenizer && processor.tokenizer.bos_token) || '<|startoftext|>';
+          prompt = `${bos}${sysPrompt ? 'system\n' + sysPrompt + '\n' : ''}user\n<image>${userPrompt}\nassistant\n`;
+        }
+        const opts = { add_special_tokens: false };
+        const first = model.order === 'image-text' ? [image, prompt] : [prompt, image];
+        try { return await processor(...first, opts); }
+        catch (e) {
+          const second = model.order === 'image-text' ? [prompt, image] : [image, prompt];
+          try { return await processor(...second, opts); }
+          catch (e2) { throw new Error(`Processor rejected both argument orders: ${e2.message}`); }
+        }
+      }
+
+      s = sessions[model.id] = {
+        tf, processor, lm,
+        async generate(image, userPrompt, sysPrompt, opts) {
+          const inputs = await buildInputs(image, userPrompt, sysPrompt);
+          const maxNew = opts.maxTokens;
+          let streamed = '';
+          let streamer = null;
+          try {
+            streamer = new tf.TextStreamer(processor.tokenizer, {
+              skip_prompt: true,
+              callback_function: text => { streamed += text; opts.onToken && opts.onToken(text); },
+            });
+          } catch (e) { streamer = null; }
+          const genArgs = { ...inputs, max_new_tokens: maxNew, do_sample: false };
+          if (streamer) genArgs.streamer = streamer;
+          let out;
+          try { out = await lm.generate(genArgs); }
+          catch (e) { out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false }); }
+          let text = streamed;
+          if (!text) {
+            try { text = processor.batch_decode(out, { skip_special_tokens: true })[0] || ''; }
+            catch (e) { text = ''; }
+          }
+          let tokens = 0;
+          try {
+            const total = out.dims ? out.dims[out.dims.length - 1] : 0;
+            const promptLen = inputs.input_ids ? inputs.input_ids.dims[inputs.input_ids.dims.length - 1] : 0;
+            tokens = Math.max(0, total - promptLen);
+          } catch (e) {}
+          return { text, tokens: tokens || Math.round(text.length / 4) };
+        },
+        reset() { delete sessions[model.id]; },
+        destroy() {
+          try { lm.dispose && lm.dispose(); } catch (e) {}
+          try { processor.dispose && processor.dispose(); } catch (e) {}
+        },
+      };
+      return s;
+    }
+
     // ---- Needle 2 (vendored WASM) ----
     const utf8enc = new TextEncoder();
     const utf8dec = new TextDecoder('utf-8');
@@ -1131,6 +1500,9 @@ ${toolsJson}`;
 
     function buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList) {
       const mode = currentMode();
+      if (mode === 'vision') {
+        return { messages: [{ role: 'user', content: userPrompt }], tools: null };
+      }
       if (model.id === 'tf-functiongemma-270m') {
         if (mode === 'tool') {
           return { messages: [
@@ -1210,8 +1582,9 @@ ${toolsJson}`;
       const rawPrompt = $('#userPrompt').value.trim();
       const file = $('#fileInput').files[0];
       const fileText = file ? `\n\n--- [File: ${file.name}] ---\n${await file.text()}\n--- [End File] ---\n` : '';
-      const userPrompt = rawPrompt + fileText;
       const mode = currentMode();
+      // Vision mode derives its prompt from the task picker (or a custom prompt).
+      const userPrompt = mode === 'vision' ? visionPrompt() : rawPrompt + fileText;
 
       let toolsJson = '[]', toolsList = [];
       if (mode === 'tool') {
@@ -1221,14 +1594,22 @@ ${toolsJson}`;
 
       if (!userPrompt.trim()) throw new Error('Prompt cannot be empty.');
 
+      // Scoring is opt-in: only grade when an expected output / keyword list is given.
+      const expected = $('#expectedOutput').value.trim();
+      const expectedKind = expected ? (/^[\[{]/.test(expected) ? 'tool' : 'keywords') : null;
+      const expectedKeywords = expectedKind === 'keywords'
+        ? expected.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+
       const result = { modelId: model.id, label: model.label, engine: model.engine, params: model.params,
-                       outputs: [], durations: [], tokens: [], status: 'ok', error: null };
+                       outputs: [], durations: [], tokens: [], status: 'ok', error: null,
+                       scores: [], expectedKind: expectedKind };
 
       try {
         card.setState('running', '<span class="spinner"></span> loading…');
         let adapter;
         if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
         else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
+        else if (model.engine === 'vision') adapter = await adapterVision(model, card);
         else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
         else if (model.engine === 'needle') adapter = await adapterNeedle(model, card);
         else throw new Error('Unknown engine: ' + model.engine);
@@ -1255,6 +1636,13 @@ ${toolsJson}`;
             const r = await adapter.generate(messages, { tools, maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); } });
             text = r.text; tokens = r.tokens;
             if (!text) card.stream('(empty output)');
+          } else if (model.engine === 'vision') {
+            if (!visionImage) throw new Error('No image selected — add one on step 1 (Vision mode).');
+            const r = await adapter.generate(visionImage, userPrompt, sysPrompt, {
+              maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); },
+            });
+            text = r.text; tokens = r.tokens;
+            if (!text) card.stream('(empty output)');
           } else if (model.engine === 'webllm') {
             const { messages } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
             const r = await adapter.chat(messages, { maxTokens, onToken: t => card.stream(t) });
@@ -1266,6 +1654,14 @@ ${toolsJson}`;
           result.outputs.push(text);
           result.durations.push(ms);
           result.tokens.push(tokens);
+
+          let score = null;
+          if (expectedKind) {
+            score = expectedKind === 'tool'
+              ? scoreToolCall(text, expected)
+              : scoreKeywords(text, expectedKeywords);
+            result.scores.push(score);
+          }
 
           const prev = previousOutputFor(model.id, currentBatchEntry);
           const diff = prev !== undefined && prev !== null ? diffPercent(prev, text) : null;
@@ -1279,6 +1675,7 @@ ${toolsJson}`;
             ${extra && extra.confidence != null ? `<span class="metric">confidence <b>${(extra.confidence * 100).toFixed(0)}%</b></span>` : ''}
             ${extra && extra.prefill_tps ? `<span class="metric">prefill <b>${extra.prefill_tps.toFixed(0)}</b> tok/s</span>` : ''}
             ${extra && extra.decode_tps ? `<span class="metric">decode <b>${extra.decode_tps.toFixed(0)}</b> tok/s</span>` : ''}
+            ${score ? `<span class="metric">score <b class="${score.cls}">${score.label}</b></span>` : ''}
           `);
           if (diff !== null) {
             const badge = card.foot.querySelector('.diff-badge');
@@ -1300,6 +1697,68 @@ ${toolsJson}`;
         throw err;
       }
       return result;
+    }
+
+    /* ============================================================
+     *  Evaluation / scoring
+     *  Two graders, chosen by the shape of the expected-output box:
+     *    - keywords: comma/newline-separated terms, case-insensitive
+     *    - tool:     a JSON object/array parsed as an expected tool call,
+     *                scored function-first then argument-by-argument
+     * ============================================================ */
+    function scoreKeywords(text, keywords) {
+      const hay = (text || '').toLowerCase();
+      const hits = keywords.filter(k => hay.includes(k));
+      const frac = keywords.length ? hits.length / keywords.length : 0;
+      const missing = keywords.filter(k => !hits.includes(k));
+      let cls = 'score-fail', label = '❌ fail', tier = 'fail';
+      if (frac >= 1) { cls = 'score-pass'; label = '✅ pass'; tier = 'pass'; }
+      else if (frac > 0) { cls = 'score-partial'; label = '⚠️ partial'; tier = 'partial'; }
+      return { kind: 'keywords', tier, cls, label, score: frac, detail: `${hits.length}/${keywords.length} keywords` + (missing.length ? ` · missing: ${missing.join(', ')}` : '') };
+    }
+
+    // Pull the first JSON object out of a model's raw text (models often wrap
+    // their call in prose or markdown fences).
+    function extractJsonObject(text) {
+      const t = (text || '').trim();
+      const start = t.indexOf('{');
+      if (start === -1) return null;
+      let depth = 0;
+      for (let i = start; i < t.length; i++) {
+        if (t[i] === '{') depth++;
+        else if (t[i] === '}') { depth--; if (depth === 0) { try { return JSON.parse(t.slice(start, i + 1)); } catch (e) { return null; } } }
+      }
+      return null;
+    }
+
+    function scoreToolCall(text, expectedRaw) {
+      let expected = null;
+      try { expected = JSON.parse(expectedRaw); } catch (e) { return { kind: 'tool', tier: 'fail', cls: 'score-fail', label: '❌ fail', score: 0, detail: 'expected tool-call JSON could not be parsed' }; }
+      if (Array.isArray(expected)) expected = expected[0];
+      const got = extractJsonObject(text);
+      if (!got) return { kind: 'tool', tier: 'fail', cls: 'score-fail', label: '❌ fail', score: 0, detail: 'no JSON object found in output' };
+
+      const expFn = expected.function || expected.name || null;
+      const gotFn = got.function || got.name || null;
+      const fnMatch = !!expFn && expFn === gotFn;
+      const expArgs = expected.arguments || expected.parameters || {};
+      const gotArgs = got.arguments || got.parameters || {};
+      const keys = Object.keys(expArgs);
+      const argHits = keys.filter(k => JSON.stringify(gotArgs[k]) === JSON.stringify(expArgs[k]));
+      const argFrac = keys.length ? argHits.length / keys.length : (fnMatch ? 1 : 0);
+
+      let tier, cls, label, score;
+      if (fnMatch && argFrac >= 1) { tier = 'pass'; cls = 'score-pass'; label = '✅ pass'; score = 1; }
+      else if (fnMatch) { tier = 'partial'; cls = 'score-partial'; label = '⚠️ partial'; score = 0.5 + 0.5 * argFrac; }
+      else { tier = 'fail'; cls = 'score-fail'; label = '❌ fail'; score = 0; }
+      const detail = `function ${fnMatch ? '✓' : `✗ (got ${gotFn || 'none'})`} · args ${argHits.length}/${keys.length}`;
+      return { kind: 'tool', tier, cls, label, score, detail };
+    }
+
+    function scoreOf(result) {
+      if (!result.scores || !result.scores.length) return null;
+      const s = result.scores[result.scores.length - 1];
+      return s;
     }
 
     function previousOutputFor(modelId, excludeBatch) {
@@ -1335,7 +1794,11 @@ ${toolsJson}`;
       if (running) return;
       // Validate step 1 inputs first
       try {
-        if (!($('#userPrompt').value.trim())) throw new Error('Enter a user prompt / request on step 1.');
+        if (currentMode() === 'vision') {
+          if (!visionImage) throw new Error('Select an image on step 1 (Vision mode).');
+        } else if (!($('#userPrompt').value.trim())) {
+          throw new Error('Enter a user prompt / request on step 1.');
+        }
         if (currentMode() === 'tool') getToolsList();
       } catch (e) {
         goStep(1);
@@ -1392,6 +1855,7 @@ ${toolsJson}`;
         sysPrompt: $('#sysPrompt').value.trim(),
         userPrompt: $('#userPrompt').value.trim(),
         toolsJson: currentMode() === 'tool' ? $('#toolsJson').value : '',
+        expectedOutput: $('#expectedOutput').value.trim(),
         maxTokens: parseInt($('#maxTokens').value, 10) || 256,
         iterations: parseInt($('#iterations').value, 10) || 1,
         retainHistory: $('#retainHistory').checked,
@@ -1402,11 +1866,40 @@ ${toolsJson}`;
       try { localStorage.setItem('slmBenchHistory', JSON.stringify(runHistory.slice(0, 200))); } catch (e) { runHistory.shift(); }
       renderHistory();
       renderSummary(entry);
+      renderScoreboard();
+    }
+
+    /* Aggregate every scored run into a per-model leaderboard. */
+    function renderScoreboard() {
+      const agg = {};
+      runHistory.forEach(batch => (batch.models || []).forEach(m => {
+        (m.scores || []).forEach(s => {
+          const a = agg[m.modelId] || (agg[m.modelId] = { label: m.label, engine: m.engine, n: 0, pass: 0, partial: 0, fail: 0, sum: 0 });
+          a.n++; a[s.tier]++; a.sum += s.score;
+        });
+      }));
+      const rows = Object.entries(agg).filter(([, a]) => a.n > 0);
+      $('#scoreboardSection').style.display = rows.length ? '' : 'none';
+      const body = $('#scoreboardBody');
+      if (!rows.length) { body.innerHTML = ''; return; }
+      rows.sort((a, b) => (b[1].sum / b[1].n) - (a[1].sum / a[1].n));
+      body.innerHTML = rows.map(([, a], i) => {
+        const mean = a.sum / a.n;
+        return `<tr>
+          <td>${i === 0 ? '<span class="trophy">🏆</span> ' : ''}<b>${escHTML(a.label)}</b></td>
+          <td>${a.n}</td>
+          <td class="score-pass">${a.pass}</td>
+          <td class="score-partial">${a.partial}</td>
+          <td class="score-fail">${a.fail}</td>
+          <td>${(mean * 100).toFixed(0)}%</td>
+          <td><span class="score-bar"><div style="width:${(mean * 100).toFixed(0)}%"></div></span></td>
+        </tr>`;
+      }).join('');
     }
 
     function renderSummary(entry) {
       const tbody = $('#summaryTable tbody');
-      if (!entry || !entry.models.length) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);">No run yet.</td></tr>'; return; }
+      if (!entry || !entry.models.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr>'; return; }
       const rows = entry.models.map(m => {
         const last = m.outputs.length - 1;
         const dur = m.durations[last] || 0;
@@ -1419,11 +1912,13 @@ ${toolsJson}`;
       tbody.innerHTML = rows.map(r => {
         const prev = previousOutputFor(r.m.modelId, entry);
         const diff = prev !== undefined && prev !== null && r.m.outputs.length ? diffPercent(prev, r.m.outputs[r.m.outputs.length - 1]) : null;
+        const sc = scoreOf(r.m);
         return `<tr>
           <td><b>${escHTML(r.m.label)}</b></td>
           <td>${ENGINES[r.m.engine].name}</td>
           <td>${escHTML(r.m.params)}</td>
           <td>${r.m.status === 'ok' ? '✅' : '❌ ' + escHTML(r.m.error || r.m.status)}</td>
+          <td>${sc ? `<span class="${sc.cls}" title="${escHTML(sc.detail || '')}">${sc.label}</span>` : '<span class="hint">–</span>'}</td>
           <td>${r === fastest ? '🏆 ' : ''}${fmt(r.dur)}</td>
           <td>${r.text.length}</td>
           <td>${r.toks}</td>
@@ -1441,6 +1936,7 @@ ${toolsJson}`;
       if (runHistory.length) currentBatch = 0;
       renderHistory();
       if (runHistory.length) renderSummary(runHistory[0]);
+      renderScoreboard();
     }
 
     function renderHistory() {
@@ -1489,9 +1985,11 @@ ${toolsJson}`;
           card.render(m.outputs[last]);
           card.setState('done', `✅ ${batch.iterations > 1 ? batch.iterations + ' iterations · ' : ''}${fmt(m.durations[last] || 0)}s`);
           const tps = (m.tokens[last] || 0) / Math.max(m.durations[last] || 0, 0.001);
+          const sc = (m.scores || [])[last];
           card.metrics(`<span class="metric">⏱️ <b>${fmt(m.durations[last] || 0)}s</b></span>
             <span class="metric">chars <b>${(m.outputs[last] || '').length}</b></span>
-            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>`);
+            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
+            ${sc ? `<span class="metric">score <b class="${sc.cls}">${sc.label}</b></span>` : ''}`);
         } else {
           card.setState('error', '❌ ' + escHTML(m.error || m.status));
           card.render(m.outputs[last] || '');
@@ -1507,13 +2005,16 @@ ${toolsJson}`;
       const esc = str => `"${(str || '').toString().replace(/"/g, '""')}"`;
       const latest = runHistory[0];
       const header = `Mode,${esc(latest.mode)}\nSystem Prompt,${esc(latest.sysPrompt)}\nUser Prompt,${esc(latest.userPrompt)}\nTools,${esc(latest.toolsJson)}\n\n`;
-      const cols = 'Date/Time,Model,Engine,Params,Iteration,Time (s),~Tokens,~tok/s,Output\n';
+      const cols = 'Date/Time,Model,Engine,Params,Iteration,Time (s),~Tokens,~tok/s,Score,Score Detail,Output\n';
       const rows = runHistory.flatMap(batch =>
         batch.models.flatMap(m =>
-          m.outputs.map((out, i) =>
-            [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1,
+          m.outputs.map((out, i) => {
+            const sc = (m.scores || [])[i];
+            return [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1,
              (m.durations[i] || 0).toFixed(2), m.tokens[i] || 0,
-             ((m.tokens[i] || 0) / Math.max(m.durations[i] || 0, 0.001)).toFixed(1), out].map(esc).join(','))
+             ((m.tokens[i] || 0) / Math.max(m.durations[i] || 0, 0.001)).toFixed(1),
+             sc ? sc.tier : '', sc ? sc.detail : '', out].map(esc).join(',');
+          })
         )
       ).join('\n');
       const link = document.createElement('a');
@@ -1536,10 +2037,53 @@ ${toolsJson}`;
     /* ============================================================
      *  Controls
      * ============================================================ */
-    $('#mode').onchange = () => {
-      $('#toolPanel').style.display = currentMode() === 'tool' ? 'block' : 'none';
+    function syncModePanels() {
+      const mode = currentMode();
+      // Only the panel owned by the active capability is shown; driven off the
+      // registry so a new capability is a one-line addition.
+      CAPABILITY_ORDER.forEach(k => {
+        const sel = CAPABILITIES[k].panel;
+        if (sel) $(sel).style.display = k === mode ? 'block' : 'none';
+      });
+      const note = $('#capNote');
+      if (note) {
+        const c = CAPABILITIES[mode];
+        note.textContent = c ? c.blurb : '';
+      }
+    }
+
+    /* Capability picker (step 1) — rendered from CAPABILITIES. */
+    function renderCapabilityPicker() {
+      const host = $('#capabilityGrid');
+      if (!host) return;
+      const current = currentMode();
+      host.innerHTML = '';
+      CAPABILITY_ORDER.forEach(key => {
+        const c = CAPABILITIES[key];
+        const models = MODELS.filter(m => (m.modes || []).includes(key) && engineAvailable(m));
+        const ready = models.filter(modelReady).length;
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'cap-card' + (key === current ? ' active' : '');
+        card.setAttribute('aria-pressed', key === current ? 'true' : 'false');
+        card.innerHTML = `<span class="cap-icon">${c.icon}</span>
+          <span class="cap-copy"><span class="cap-name">${escHTML(c.name)}</span>
+            <span class="cap-blurb">${escHTML(c.blurb)}</span>
+            <span class="cap-count">${models.length} model${models.length === 1 ? '' : 's'} · ${ready} ready</span></span>`;
+        card.onclick = () => setCapability(key);
+        host.appendChild(card);
+      });
+    }
+
+    function setCapability(key) {
+      if (!CAPABILITIES[key]) return;
+      $('#mode').value = key;
+      syncModePanels();
+      renderCapabilityPicker();
       if (currentStep === 2) buildModelPicker();
-    };
+    }
+    $('#imageInput').onchange = () => loadVisionImage($('#imageInput').files[0]);
+    $('#visionTask').onchange = () => { if ($('#visionTask').value === 'custom') $('#userPrompt').focus(); };
     $('#showNotReady').onchange = () => { prefs.showNotReady = $('#showNotReady').checked; savePrefs(); buildModelPicker(); };
     $('#s1Next').onclick = () => {
       const errEl = $('#step1 .step-error'); if (errEl) errEl.remove();
@@ -1578,6 +2122,8 @@ ${toolsJson}`;
     // defaults
     $('#toolsJson').value = JSON.stringify(DEFAULT_TOOLS, null, 2);
     $('#showNotReady').checked = !!prefs.showNotReady;
+    syncModePanels();
+    renderCapabilityPicker();
 
     loadHistory();
     restoreDlState();
