@@ -80,24 +80,23 @@ files that get downloaded, measured against the Hub.
 | **Moondream2** | 1.8B | q4 | ~1.5GB | WebGPU | ❌ unsupported (see below) |
 | **Phi-3.5-vision-instruct** (Microsoft) | 4.2B | q4f16 | ~2.5GB | WebGPU | ⬜ not downloaded here |
 
-> **Honesty notes on the vision set.** The `vision models to add to bench.md` write-up names
-> `Xenova/moondream2`, `HuggingFaceTB/SmolVLM-Instruct` and `Xenova/Phi-3.5-vision-instruct`. Those
-> repos were checked against the Hub: `Xenova/moondream2` and `HuggingFaceTB/SmolVLM-Instruct` exist
-> and are wired in (SmolVLM via the `HuggingFaceTB` repo, which carries the ONNX weights directly),
-> but `Xenova/Phi-3.5-vision-instruct` **does not exist** — the working repo is
-> `onnx-community/Phi-3.5-vision-instruct`, so that is what the registry uses. The two SmolVLM
-> *tiny* variants (256M/500M) are added because they are the only ones that actually run on CPU.
->
-> **Moondream2 does not work with Transformers.js.** Its config declares `model_type: moondream1`,
-> and Transformers.js has no such model class (it ships `Phi3VForCausalLM`, `Idefics3ForConditionalGeneration`
-> and `Lfm2VlForConditionalGeneration`, but no `Moondream`). The entry is kept, marked
-> *experimental* in the picker, and expected to fail at load. A working browser Moondream would
-> need a community ONNX repo with a supported architecture.
->
-> **WebGPU-only models** (2B and above) are hidden from the picker when WebGPU is unavailable, because
-> their weights blow past what the WASM heap will hold. The three smallest run on CPU/WASM.
+### Vision runtime notes
 
-> The "230M" LFM2.5 and "1.5B" Qwen variants from the original landscape write-up are not wired in yet — the 350M LFM2.5 and 0.5B/0.6B Qwen variants cover the same tiers. Adding more entries is a one-line change in the `MODELS` registry inside `index.html`.
+- **Repository names.** The vision entries point at the ONNX weights that actually resolve on the
+  Hub: SmolVLM comes from the `HuggingFaceTB` repos (which publish ONNX weights directly), and the
+  Phi-3.5 entry uses `onnx-community/Phi-3.5-vision-instruct`. Note that
+  `Xenova/Phi-3.5-vision-instruct` does not exist on the Hub, so the `onnx-community` repo is used.
+  The two SmolVLM *tiny* variants (256M/500M) are included because they are the only vision models
+  here that run on CPU.
+- **Moondream2 is unsupported by Transformers.js.** Its config declares `model_type: moondream1`, and
+  Transformers.js has no matching model class (it ships `Phi3VForCausalLM`,
+  `Idefics3ForConditionalGeneration` and `Lfm2VlForConditionalGeneration`, but no `Moondream`). The
+  entry is kept, marked *experimental* in the picker, and expected to fail at load. A working browser
+  Moondream would need a community ONNX repo with a supported architecture.
+- **WebGPU-only models** (2B and above) are hidden from the picker when WebGPU is unavailable, because
+  their weights exceed what the WASM heap can hold. The three smallest run on CPU/WASM.
+
+> The "230M" LFM2.5 and "1.5B" Qwen variants are not wired in yet — the 350M LFM2.5 and 0.5B/0.6B Qwen variants cover the same tiers. Adding more entries is a one-line change in the `MODELS` registry inside `index.html`.
 
 ## Running locally
 
