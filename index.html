@@ -125,6 +125,21 @@
     .model-opt .m-meta { color: var(--muted); font-size: 0.72rem; }
     .model-opt.not-ready { opacity: 0.85; }
     .model-opt.not-ready .m-label { color: var(--muted); }
+    /* Advisory only: a model that likely won't fit reported hardware is greyed
+       out but stays fully clickable — run anyway is always allowed. */
+    .model-opt.over-budget { opacity: 0.6; }
+    .model-opt.over-budget .m-label { color: var(--muted); }
+    .over-note { color: var(--warn) !important; }
+    .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; margin: 0.6rem 0; }
+    .device-grid label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; color: var(--muted); }
+    .device-grid input { width: 100%; }
+    .set-row.over-budget { opacity: 0.7; }
+    /* Context sweep (step 1): toggle chips for the context sizes to test. */
+    .sweep-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.4rem 0; }
+    .sweep-chip { background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 0.8rem; cursor: pointer; }
+    .sweep-chip:hover { border-color: var(--accent); }
+    .sweep-chip.active { background: var(--accent); border-color: var(--accent); color: #11111b; font-weight: 600; }
+    .sweep-row td { font-variant-numeric: tabular-nums; }
     .m-dl { display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.3rem; }
     .m-dl .dl-progress { width: 90px; height: 4px; background: #313244; border-radius: 2px; overflow: hidden; }
     .m-dl .dl-progress > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.15s; }
@@ -393,6 +408,20 @@
           <div id="chainList" class="chain-list"></div>
         </div>
 
+        <div id="sweepPanel" style="display:none;">
+          <h2 style="font-size:0.95rem;">Context sizes to sweep <span class="hint">(the prompt is padded with neutral filler up to each size)</span></h2>
+          <p class="hint" style="margin:0;">The same prompt is run once per size below, with its context padded to that
+            length. Prefill (prompt processing) happens before the first token, so TTFT is where a long context hurts —
+            this is how you measure that wall directly instead of guessing from decode speed.</p>
+          <div id="sweepChips" class="sweep-chips"></div>
+          <div class="row wrap">
+            <label>Output tokens per size
+              <input type="number" id="sweepTokens" min="1" max="512" value="32" title="How many tokens each size may generate. Keep it small — the sweep is about the wait before output, not long answers.">
+            </label>
+          </div>
+          <p class="hint" id="sweepEstimate" style="margin:0;"></p>
+        </div>
+
         <label id="userPromptBlock">User Prompt / Request
           <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
         </label>
@@ -454,9 +483,9 @@
         <div class="table-container">
           <table id="summaryTable">
             <thead>
-              <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Score</th><th>Time (s)</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
+              <tr><th>Model</th><th>Engine</th><th>Params</th><th>Status</th><th>Score</th><th>Time (s)</th><th title="time to first token — prompt/prefill processing happens here">TTFT (s)</th><th title="prompt/prefill processing rate">Prefill ~tok/s</th><th title="steady-state output rate after the first token">Decode ~tok/s</th><th>Chars</th><th>~Tokens</th><th>~tok/s</th><th>Δ vs prev</th></tr>
             </thead>
-            <tbody><tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
+            <tbody><tr><td colspan="13" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
           </table>
         </div>
 
@@ -485,6 +514,28 @@
             <h3>Tools (Latest)</h3><p id="printTools"></p>
           </div>
 
+          <h2>Stage Timings <span class="hint">(latest run — where the time went)</span></h2>
+          <p class="hint" style="margin:0 0 0.5rem;">TTFT is the wait before the first token; prompt/prefill processing happens entirely inside it, so it grows with context. Decode is the steady output rate after that first token.</p>
+          <div class="table-container">
+            <table id="printStagesTable">
+              <thead><tr><th>Model</th><th title="model download/initialisation">Load (s)</th><th title="time to first token">TTFT (s)</th><th title="prompt/prefill processing rate">Prefill ~tok/s</th><th title="steady-state output rate">Decode ~tok/s</th></tr></thead>
+              <tbody id="printStagesBody"><tr><td colspan="5" style="text-align:center;color:var(--muted);">No run yet.</td></tr></tbody>
+            </table>
+          </div>
+
+          <div id="sweepSection" style="display:none;">
+            <h2>Context Sweep <span class="hint">(latest run — one prompt padded to growing context)</span></h2>
+            <p class="hint" style="margin:0 0 0.5rem;">Each row is the same prompt padded with neutral filler to a larger
+              context. Watch TTFT and prefill rate climb with context even when decode speed barely moves — that is the
+              wall a single-context benchmark hides.</p>
+            <div class="table-container">
+              <table id="sweepTable">
+                <thead><tr><th>Model</th><th title="target context size">Target</th><th title="prompt tokens the engine reported">Prompt ~tok</th><th title="time to first token — where prefill happens">TTFT (s)</th><th title="prompt/prefill processing rate">Prefill ~tok/s</th><th title="steady-state output rate after the first token">Decode ~tok/s</th><th>Output ~tok</th></tr></thead>
+                <tbody id="sweepBody"></tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="row" style="justify-content: space-between; align-items:center;">
             <h2>Run History</h2>
             <div class="row" style="gap: 0.5rem;">
@@ -496,7 +547,7 @@
 
           <div class="table-container" style="margin-top:0.75rem;">              <table id="historyTable">
               <thead>
-                <tr><th>Date/Time</th><th>Shape</th><th>Models/Steps</th><th>Iters</th><th>Avg Time (s)</th><th>Avg ~tok/s</th><th>Total ~tok</th><th>Pass/Part/Fail</th><th>Peak Heap</th><th>Prompt Preview</th></tr>
+                <tr><th>Date/Time</th><th>Shape</th><th>Models/Steps</th><th>Iters</th><th>Avg Time (s)</th><th>Avg ~tok/s</th><th title="average time to first token">Avg TTFT (s)</th><th title="average prompt/prefill processing rate">Prefill ~tok/s</th><th>Total ~tok</th><th>Pass/Part/Fail</th><th>Peak Heap</th><th>Prompt Preview</th></tr>
               </thead>
               <tbody id="historyBody"></tbody>
             </table>
@@ -513,6 +564,21 @@
 
     <!-- ================= SETTINGS VIEW ================= -->
     <div id="viewSettings" style="display:none;">
+      <section class="card">
+        <h2>This Device <span class="hint">(used to flag models that likely won't fit)</span></h2>
+        <p class="hint" style="margin:0;">A sandboxed web page can't read your total RAM or GPU memory — the browser only exposes a coarse, capped figure. Enter your machine's real numbers below and the bench will grey out models that probably won't fit. A greyed model is <b>still selectable, downloadable and runnable</b> — it's advice, not a lockout.</p>
+        <div class="device-grid">
+          <label>CPU logical cores <input id="devCores" type="number" min="1" max="512" step="1" placeholder="auto-detect"></label>
+          <label>System RAM (GB) <input id="devRam" type="number" min="1" max="2048" step="1" placeholder="auto-detect"></label>
+          <label>GPU memory / VRAM (GB) <input id="devVram" type="number" min="0" max="512" step="1" placeholder="needed for WebGPU models"></label>
+        </div>
+        <p class="hint" id="deviceDetected" style="margin:0.4rem 0;"></p>
+        <div class="row wrap" style="gap:0.5rem;">
+          <button id="deviceDetect" class="btn-small btn-secondary">⤓ Fill detected values</button>
+          <button id="deviceClear" class="btn-small btn-secondary">Clear</button>
+        </div>
+      </section>
+
       <section class="card">
         <h2>Displayed Models <span class="hint">(which models appear in the bench picker)</span></h2>
         <p class="hint" style="margin:0;">Grouped by capability. Each model is filed under its primary capability; badges show every capability it supports.</p>
@@ -580,8 +646,10 @@
                  blurb: 'The same prompt across several models, side by side.' },
       chain:   { icon: '🔗', name: 'Chain of steps',
                  blurb: 'An ordered pipeline — each step picks its own model and what it receives from earlier steps.' },
+      sweep:   { icon: '📈', name: 'Context sweep',
+                 blurb: 'One prompt padded to growing context sizes — watch TTFT and prefill climb as the context does.' },
     };
-    const SHAPE_ORDER = ['single', 'compare', 'chain'];
+    const SHAPE_ORDER = ['single', 'compare', 'chain', 'sweep'];
     const SHAPE_KEY = 'slmRunShape';
     let runShape = (() => {
       try { const v = localStorage.getItem(SHAPE_KEY); return SHAPES[v] ? v : 'compare'; }
@@ -712,16 +780,93 @@ ${toolsJson}`;
     let currentCards = {};
     let currentBatchEntry = null;
 
-    const DEFAULT_PREFS = { hidden: [], downloaded: {}, showNotReady: false };
+    /* ---- Context-length sweep -------------------------------------------
+       The article's real lesson: at long context, decode speed barely changes
+       but the wait *before* the first token — prefill / prompt processing —
+       blows up. This run shape repeats one prompt padded with neutral filler
+       up to a growing target size, so the prefill wall is measured instead of
+       hidden. Padding is approximate (~4 chars/token); the engine's reported
+       prompt token count replaces the estimate whenever it is available. The
+       block below is deliberately dependency-free so `npm run check` can
+       evaluate it headlessly and test the padding logic. */
+    const SWEEP_FILLER = `The harbour town of Marlow sits where the river bends north around a low
+ridge of chalk. For most of the nineteenth century its economy rested on
+shipbuilding, a trade that shaped the terraces along Quay Street and left the
+town with more than its share of long warehouses and narrow alleys. The
+warehouses have since been converted, some into workshops, others into the
+small museum that documents the yards and the families who worked them.
+
+Inland, the land rises gently through orchards and a patchwork of hedged
+fields. The soil is thin and stony on the ridge and richer in the valley,
+where the river regularly floods the lower meadows in spring. Farmers there
+grow mostly wheat and barley, with a few vineyards appearing on the warmer
+south-facing slopes. The old drovers' path still crosses the fields, marked
+by a line of oaks that predate the enclosures.
+
+The town itself is compact. A single high street runs from the quay to the
+market square, lined with shops, a library, two churches and a clock tower
+that has been repaired so often that little of the original stone remains.
+Beyond the square the streets narrow and climb, ending at a common that is
+kept open by an old charter. On clear days the common offers a view across
+the valley to the coast, and a line of distant wind turbines turns slowly on
+the horizon.
+
+Weather here is changeable. Mornings are often grey with mist off the water;
+afternoons can clear suddenly, and the light on the chalk is at its best in
+the hour before dusk. Winters are wet rather than cold, and snow rarely
+settles for more than a day. The river is tidal below the bridge, and the
+tide tables still matter to the handful of boats that moor at the quay.
+
+`;
+    const SWEEP_PRESETS = [2048, 4096, 8192, 16384, 32768];
+    const DEFAULT_SWEEP_SIZES = SWEEP_PRESETS.slice(0, 4);
+    const DEFAULT_SWEEP_TOKENS = 32;
+    const SWEEP_SEP = '\n\n--- end of context ---\n\n';
+    // Short label for a context size: 2048 → "2K", 16384 → "16K".
+    function sizeLabel(n) {
+      const v = Math.round(Number(n) || 0);
+      if (v >= 1024) return (v % 1024 === 0 ? (v / 1024) : (v / 1024).toFixed(1)) + 'K';
+      return v + ' tok';
+    }
+    // Pad `base` with neutral filler until the whole prompt is ~targetTokens
+    // long. The base question stays last so the model still answers it.
+    function buildSweepPrompt(base, targetTokens) {
+      const baseText = String(base == null ? '' : base);
+      const want = Math.max(0, Math.round((Number(targetTokens) || 0) * 4) - baseText.length - SWEEP_SEP.length);
+      if (want <= 0) return baseText;
+      let filler = '';
+      while (filler.length < want) filler += SWEEP_FILLER;
+      filler = filler.slice(0, want);
+      // Trim back to a word boundary so the padding never cuts mid-word.
+      const cut = filler.lastIndexOf(' ');
+      if (cut > want - 200 && cut > 0) filler = filler.slice(0, cut);
+      return filler + SWEEP_SEP + baseText;
+    }
+    /* SWEEP_BLOCK_END */
+
+    const DEFAULT_PREFS = { hidden: [], downloaded: {}, showNotReady: false, device: {},
+                            sweepSizes: DEFAULT_SWEEP_SIZES.slice(), sweepTokens: DEFAULT_SWEEP_TOKENS };
     const PREFS_KEY = 'slmPrefs2';
     function loadPrefs() {
       let raw = {};
       try { raw = JSON.parse(localStorage.getItem(PREFS_KEY) || 'null') || {}; } catch (e) { raw = {}; }
+      const device = (raw.device && typeof raw.device === 'object' && !Array.isArray(raw.device)) ? raw.device : {};
+      const pos = v => (typeof v === 'number' && isFinite(v) && v > 0) ? v : null;
+      const sweepSizes = Array.isArray(raw.sweepSizes)
+        ? [...new Set(raw.sweepSizes.map(pos).filter(Boolean).map(v => Math.round(v)))].sort((a, b) => a - b)
+        : null;
       // Schema validation so a corrupt/partial write can never brick readiness.
       return {
         hidden: Array.isArray(raw.hidden) ? raw.hidden.filter(x => typeof x === 'string') : [],
         downloaded: (raw.downloaded && typeof raw.downloaded === 'object' && !Array.isArray(raw.downloaded)) ? raw.downloaded : {},
         showNotReady: !!raw.showNotReady,
+        // Self-reported hardware (Settings → This Device); null means "not told".
+        device: { cores: pos(device.cores), ramGB: pos(device.ramGB), vramGB: pos(device.vramGB) },
+        // Context-sweep settings: which sizes to test, and how many tokens each
+        // size may generate (kept small — the sweep is about the wait, not long
+        // answers).
+        sweepSizes: (sweepSizes && sweepSizes.length) ? sweepSizes : DEFAULT_SWEEP_SIZES.slice(),
+        sweepTokens: pos(raw.sweepTokens) ? Math.min(512, Math.round(pos(raw.sweepTokens))) : DEFAULT_SWEEP_TOKENS,
       };
     }
     let prefs = loadPrefs();
@@ -890,7 +1035,7 @@ ${toolsJson}`;
       host.innerHTML = '';
       const shapeNote = $('#shapeStep2Note');
       if (shapeNote) {
-        shapeNote.style.display = runShape === 'chain' ? '' : 'none';
+        shapeNote.style.display = (runShape === 'chain' || runShape === 'sweep') ? '' : 'none';
         shapeNote.textContent = chainShapeNote();
       }
 
@@ -929,10 +1074,13 @@ ${toolsJson}`;
       });
       const selectedRunnable = [...selectedIds].filter(id =>
         MODELS.some(m => m.id === id && visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelReady(m))).length;
+      // Models the self-reported hardware likely can't carry (advisory only).
+      const overModels = MODELS.filter(m => visibleModel(m) && applicableToMode(m) && engineAvailable(m) && modelFit(m).state === 'over');
       $('#pickSummary').textContent =
         `${SHAPES[runShape].icon} ${SHAPES[runShape].name} · testing ${capabilityLabel(mode)} · ` +
         `${readyCount} ready · ${hiddenCount} not downloaded yet` +
         (unavailableCount ? ` · ${unavailableCount} hidden (${[...new Set(unavailable)].join(', ')})` : '') +
+        (overModels.length ? ` · ${overModels.length} over reported hardware` : '') +
         ` · ${selectedRunnable} selected` + (runShape === 'single' ? ' · one is enough' : '');
 
       // Capability sections. The one under test comes first and is open and
@@ -1027,12 +1175,21 @@ ${toolsJson}`;
         banner.textContent = `${unavailableCount} model(s) hidden because their engine isn't available here (${[...new Set(unavailable)].join(', ')}).`;
         host.prepend(banner);
       }
+      if (overModels.length) {
+        const banner = document.createElement('div');
+        banner.className = 'pick-banner';
+        banner.innerHTML = `${overModels.length} model(s) are greyed out because your reported hardware probably can't carry them. ` +
+          `They're still selectable and runnable — adjust or clear your specs in <b>Settings → This Device</b> to change the flags.`;
+        host.prepend(banner);
+      }
       persistSelection();
     }
 
     function modelRow(m, ready, runnable = true) {
+      const fit = modelFit(m);
+      const over = fit.state === 'over';
       const l = document.createElement('label');
-      l.className = 'model-opt' + (ready ? '' : ' not-ready') + (runnable ? '' : ' cap-locked');
+      l.className = 'model-opt' + (ready ? '' : ' not-ready') + (runnable ? '' : ' cap-locked') + (over ? ' over-budget' : '');
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       // A model from another capability is shown for reference only — its
@@ -1057,6 +1214,7 @@ ${toolsJson}`;
       span.innerHTML = `<span class="m-label">${escHTML(m.label)}</span>
         <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>
         ${capabilityBadges(m)}
+        ${over ? `<div class="m-meta over-note">⚠️ likely too heavy for this device — needs ~${fit.need.toFixed(1)}GB ${fit.kind}, you reported ${fit.have}GB. Still runnable.</div>` : ''}
         ${runnable ? '' : '<div class="m-meta cap-lock-note">Switch the test type above to run this model.</div>'}
         ${m.experimental ? `<div class="m-meta" style="color:var(--warn)">⚠️ experimental — ${escHTML(m.experimental)}</div>` : ''}`;
       if (!ready) {
@@ -1095,7 +1253,54 @@ ${toolsJson}`;
     /* ============================================================
      *  Settings view
      * ============================================================ */
+    function renderDeviceSettings() {
+      if (!prefs.device) prefs.device = { cores: null, ramGB: null, vramGB: null };
+      const setVal = (sel, v) => { const el = $(sel); if (el) el.value = v != null ? v : ''; };
+      setVal('#devCores', prefs.device.cores);
+      setVal('#devRam', prefs.device.ramGB);
+      setVal('#devVram', prefs.device.vramGB);
+
+      const apply = () => {
+        const num = sel => { const v = parseFloat($(sel).value); return (isFinite(v) && v > 0) ? v : null; };
+        prefs.device = { cores: num('#devCores'), ramGB: num('#devRam'), vramGB: num('#devVram') };
+        savePrefs();
+        renderDeviceSummary();
+        // Re-render the fit-dependent views so flags update immediately.
+        renderSettings();
+        if (currentStep === 2) buildModelPicker();
+      };
+      ['#devCores', '#devRam', '#devVram'].forEach(sel => { const el = $(sel); if (el) el.onchange = apply; });
+      const detect = $('#deviceDetect');
+      if (detect) detect.onclick = () => {
+        setVal('#devCores', navigator.hardwareConcurrency || null);
+        setVal('#devRam', navigator.deviceMemory || null);
+        apply();
+      };
+      const clear = $('#deviceClear');
+      if (clear) clear.onclick = () => { setVal('#devCores', null); setVal('#devRam', null); setVal('#devVram', null); apply(); };
+      renderDeviceSummary();
+    }
+
+    // What the browser can see — and a blunt reminder of what it can't, so the
+    // self-reported numbers above are understood to be the real source.
+    async function renderDeviceSummary() {
+      const el = $('#deviceDetected');
+      if (!el) return;
+      const hc = navigator.hardwareConcurrency || '? unknown';
+      const mem = navigator.deviceMemory ? `~${navigator.deviceMemory}GB (browser-capped)` : 'not exposed';
+      const gpu = await probeGpu();
+      const gpuTxt = gpu.available ? (gpu.label ? `WebGPU · ${escHTML(gpu.label)}` : 'WebGPU available') : 'WebGPU not available';
+      const d = deviceProfile();
+      const bits = [d.cores ? `${d.cores} cores` : null, d.ramGB ? `${d.ramGB}GB RAM` : null, d.vramGB ? `${d.vramGB}GB VRAM` : null].filter(Boolean);
+      el.innerHTML = `Browser detects: <b>${hc}</b> logical cores · device memory <b>${mem}</b> · <b>${gpuTxt}</b>. ` +
+        `Total RAM and GPU memory are never exposed to a web page, so the fit checks use what you enter above` +
+        (bits.length ? ` — currently ${bits.join(' · ')}.` : ' (nothing entered yet, so nothing is greyed out).');
+    }
+
     function renderSettings() {
+      // Hardware self-report drives which models are flagged as too heavy.
+      renderDeviceSettings();
+
       // Displayed models — grouped by the capability each model is filed under.
       const dl = $('#displayList');
       dl.innerHTML = '';
@@ -1148,8 +1353,11 @@ ${toolsJson}`;
         const blocked = m.engine === 'vision' && !visionRunnable(m);
         const ready = modelReady(m);
         const state = downloading[m.id] ? 'downloading' : (ready ? 'ready' : 'missing');
+        const fit = modelFit(m);
+        if (fit.state === 'over') row.className = 'set-row over-budget';
         row.innerHTML = `<div class="grow"><div class="s-name">${escHTML(m.label)}</div>
-          <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)} · ${escHTML(m.size)}</div></div>`;
+          <div class="s-meta">${ENGINES[m.engine].name} · ${escHTML(m.params)} · ${escHTML(m.size)}</div>
+          ${fit.state === 'over' ? `<div class="s-meta over-note">⚠️ needs ~${fit.need.toFixed(1)}GB ${fit.kind}; you reported ${fit.have}GB — still downloadable</div>` : ''}</div>`;
         const status = document.createElement('div');
         status.className = 'dl-status';
         if (noDownload) {
@@ -1466,9 +1674,16 @@ ${toolsJson}`;
           }
           const maxNew = opts.maxTokens;
           let streamed = '';
+          let ttftMs = null;
+          // Time to first token is measured from just before generation starts,
+          // so it captures the prefill/prompt-processing stage plus any queue.
+          const t0 = performance.now();
           const streamer = new tf.TextStreamer(tokenizer, {
             skip_prompt: true,
-            callback_function: text => { streamed += text; opts.onToken && opts.onToken(text); },
+            callback_function: text => {
+              if (ttftMs == null) ttftMs = performance.now() - t0;
+              streamed += text; opts.onToken && opts.onToken(text);
+            },
           });
           let out;
           try {
@@ -1476,14 +1691,15 @@ ${toolsJson}`;
           } catch (e) {
             out = await lm.generate({ ...inputs, max_new_tokens: maxNew, do_sample: false, repetition_penalty: 1.05 });
           }
-          let genTokens = 0;
+          let genTokens = 0, promptTokens = null;
           try {
             const total = out.dims ? out.dims[out.dims.length - 1] : (out.input_ids ? out.input_ids.dims[out.input_ids.dims.length - 1] : 0);
             const promptLen = inputs.input_ids ? inputs.input_ids.dims[inputs.input_ids.dims.length - 1] : 0;
             genTokens = Math.max(0, total - promptLen);
+            promptTokens = promptLen || null;
           } catch (e) {}
           const text = streamed || (typeof out === 'string' ? out : '');
-          return { text, tokens: genTokens || Math.round(text.length / 4) };
+          return { text, tokens: genTokens || Math.round(text.length / 4), promptTokens, ttftMs };
         },
         // Release the ONNX runtime model/tokenizer, not just the registry
         // reference — otherwise every non-retained run leaks model memory.
@@ -1514,6 +1730,8 @@ ${toolsJson}`;
         engine,
         async chat(messages, opts) {
           let text = '';
+          let ttftMs = null, promptTokens = null, completionTokens = null;
+          const t0 = performance.now();
           const chunks = await engine.chat.completions.create({
             messages,
             stream: true,
@@ -1522,9 +1740,18 @@ ${toolsJson}`;
           for await (const c of chunks) {
             if (stopped) { try { engine.interruptGenerate(); } catch (e) {} throw new Error('stopped'); }
             const delta = c && c.choices && c.choices[0] && c.choices[0].delta && c.choices[0].delta.content;
-            if (delta) { text += delta; opts.onToken && opts.onToken(delta); }
+            if (delta) {
+              if (ttftMs == null) ttftMs = performance.now() - t0;
+              text += delta; opts.onToken && opts.onToken(delta);
+            }
+            // WebLLM reports real prompt/completion counts on the final chunk.
+            const usage = c && c.usage;
+            if (usage) {
+              if (usage.prompt_tokens) promptTokens = usage.prompt_tokens;
+              if (usage.completion_tokens) completionTokens = usage.completion_tokens;
+            }
           }
-          return { text, tokens: Math.round(text.length / 4) };
+          return { text, tokens: completionTokens || Math.round(text.length / 4), promptTokens, ttftMs };
         },
         reset() { try { engine.unload(); } catch (e) {} delete sessions[model.id]; },
         destroy() { try { engine.unload(); } catch (e) {} },
@@ -1585,10 +1812,15 @@ ${toolsJson}`;
           const maxNew = opts.maxTokens;
           let streamed = '';
           let streamer = null;
+          let ttftMs = null;
+          const t0 = performance.now();
           try {
             streamer = new tf.TextStreamer(processor.tokenizer, {
               skip_prompt: true,
-              callback_function: text => { streamed += text; opts.onToken && opts.onToken(text); },
+              callback_function: text => {
+                if (ttftMs == null) ttftMs = performance.now() - t0;
+                streamed += text; opts.onToken && opts.onToken(text);
+              },
             });
           } catch (e) { streamer = null; }
           const genArgs = { ...inputs, max_new_tokens: maxNew, do_sample: false };
@@ -1601,13 +1833,14 @@ ${toolsJson}`;
             try { text = processor.batch_decode(out, { skip_special_tokens: true })[0] || ''; }
             catch (e) { text = ''; }
           }
-          let tokens = 0;
+          let tokens = 0, promptTokens = null;
           try {
             const total = out.dims ? out.dims[out.dims.length - 1] : 0;
             const promptLen = inputs.input_ids ? inputs.input_ids.dims[inputs.input_ids.dims.length - 1] : 0;
             tokens = Math.max(0, total - promptLen);
+            promptTokens = promptLen || null;
           } catch (e) {}
-          return { text, tokens: tokens || Math.round(text.length / 4) };
+          return { text, tokens: tokens || Math.round(text.length / 4), promptTokens, ttftMs };
         },
         reset() {
           try { lm.dispose && lm.dispose(); } catch (e) {}
@@ -1761,6 +1994,109 @@ ${toolsJson}`;
       };
     }
 
+    /* ---- Stage timings --------------------------------------------------
+       A local-model benchmark is really about *where the time goes*. Two
+       numbers matter most, and they are not "tokens/sec":
+         - TTFT (time to first token): how long you wait before output starts.
+           Prompt/prefill processing happens entirely inside this window, so at
+           long context it dominates the whole experience.
+         - prefill vs decode rate: prompt tokens/sec against steady-state
+           output tokens/sec. Decode speed alone hides a slow prefill.
+       We measure TTFT from just before generation begins to the first streamed
+       token; decode rate is the output rate *after* that first token. Engines
+       that report their own split (Needle 2) win over our estimate. */
+    function makeStage({ genMs, ttftMs, promptTokens, promptChars, tokens, extra }) {
+      const realPrompt = promptTokens != null && promptTokens > 0;
+      const pt = realPrompt ? promptTokens : Math.max(1, Math.round((promptChars || 0) / 4));
+      const ttft = ttftMs != null ? ttftMs : null;
+      const decodeMs = ttft != null ? Math.max(0, genMs - ttft) : null;
+      const engPrefill = extra && extra.prefill_tps ? extra.prefill_tps : null;
+      const engDecode = extra && extra.decode_tps ? extra.decode_tps : null;
+      return {
+        genMs,
+        ttftMs: ttft,
+        decodeMs,
+        tokens: tokens || 0,
+        promptTokens: pt,
+        realPromptTokens: realPrompt,
+        // Prompt-processing rate: prompt tokens served per second of TTFT.
+        promptTps: engPrefill != null ? engPrefill : (ttft && ttft > 0 ? pt / (ttft / 1000) : null),
+        // Steady-state output rate, excluding the first (prefill-bound) token.
+        decodeTps: engDecode != null ? engDecode
+          : (decodeMs && decodeMs > 0 && (tokens || 0) > 1 ? (tokens - 1) / (decodeMs / 1000) : null),
+      };
+    }
+
+    // Average a stage field across a result's iterations (null when never seen).
+    function avgStageValue(result, key) {
+      const vals = (result && result.stages ? result.stages : []).map(s => s && s[key]).filter(v => v != null && isFinite(v));
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    }
+
+    /* ---- Hardware fit ---------------------------------------------------
+       A sandboxed page can see very little of the machine: logical cores
+       (`navigator.hardwareConcurrency`), a coarse, privacy-capped RAM figure
+       (`navigator.deviceMemory`, usually capped at 8) and whether WebGPU
+       exists. Total RAM and VRAM are never exposed. So users can self-report
+       those in Settings, and that report drives which models are flagged as
+       likely too heavy. A flag is advisory only — the model stays selectable,
+       downloadable and runnable. */
+    let gpuProbe = null;
+    async function probeGpu() {
+      if (gpuProbe) return gpuProbe;
+      gpuProbe = { available: false, label: null };
+      try {
+        if (typeof navigator !== 'undefined' && navigator.gpu) {
+          const adapter = await navigator.gpu.requestAdapter();
+          if (adapter) {
+            let info = adapter.info;
+            if (!info && adapter.requestAdapterInfo) { try { info = await adapter.requestAdapterInfo(); } catch (e) {} }
+            const bits = info ? [info.vendor, info.architecture, info.description].filter(Boolean) : [];
+            gpuProbe = { available: true, label: bits.length ? bits.join(' · ') : null };
+          }
+        }
+      } catch (e) {}
+      return gpuProbe;
+    }
+
+    // The numbers fit checks use: self-reported values win, else the coarse
+    // browser-detected fallbacks (device RAM may be capped at 8 by the browser).
+    function deviceProfile() {
+      const d = (prefs && prefs.device) || {};
+      return {
+        cores: d.cores || (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || null,
+        ramGB: d.ramGB || (typeof navigator !== 'undefined' && navigator.deviceMemory) || null,
+        vramGB: d.vramGB || null,
+      };
+    }
+
+    // Weight footprint in GB, parsed from the registry's `size` label.
+    function weightGB(m) {
+      const mm = /([\d.]+)\s*(GB|MB)/i.exec(String(m.size || ''));
+      if (!mm) return null;
+      const n = parseFloat(mm[1]);
+      return /mb/i.test(mm[2]) ? n / 1024 : n;
+    }
+
+    // Does this model plausibly fit the reported/derived hardware? Weights plus
+    // headroom for the KV cache and activations; GPU-backed models are bounded
+    // by VRAM, everything else by system RAM. `unknown` (nothing reported) is
+    // never treated as a failure.
+    function modelFit(m) {
+      const w = weightGB(m);
+      if (w == null) return { state: 'unknown' };
+      const d = deviceProfile();
+      const needsGpu = m.engine === 'webllm' || (m.engine === 'vision' && m.needsWebGPU);
+      const needRam = w * 1.35 + 0.6;
+      const needVram = w * 1.2 + 0.5;
+      if (needsGpu) {
+        if (d.vramGB == null) return { state: 'unknown', need: needVram, kind: 'VRAM' };
+        return { state: d.vramGB >= needVram ? 'ok' : 'over', need: needVram, kind: 'VRAM', have: d.vramGB };
+      }
+      if (d.ramGB == null) return { state: 'unknown', need: needRam, kind: 'RAM' };
+      return { state: d.ramGB >= needRam ? 'ok' : 'over', need: needRam, kind: 'RAM', have: d.ramGB };
+    }
+
     // Mirror every progress line to the console AND the on-page activity log, so
     // a run can be followed without devtools open.
     function log(msg, cls) {
@@ -1800,8 +2136,9 @@ ${toolsJson}`;
         if (last.chars != null) parts.push(`<span class="metric">chars <b>${last.chars}</b></span>`);
         if (last.diff != null) parts.push(`<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${last.diff}%</b></span>`);
         if (last.confidence != null) parts.push(`<span class="metric">confidence <b>${(last.confidence * 100).toFixed(0)}%</b></span>`);
-        if (last.prefill) parts.push(`<span class="metric">prefill <b>${last.prefill.toFixed(0)}</b> tok/s</span>`);
-        if (last.decode) parts.push(`<span class="metric">decode <b>${last.decode.toFixed(0)}</b> tok/s</span>`);
+        if (last.ttft != null) parts.push(`<span class="metric" title="time to first token — prompt/prefill processing happens in this window">TTFT <b>${fmt(last.ttft / 1000)}s</b></span>`);
+        if (last.promptTps != null) parts.push(`<span class="metric" title="prompt/prefill processing rate">prefill <b>${last.promptTps.toFixed(0)}</b> tok/s</span>`);
+        if (last.decodeTps != null) parts.push(`<span class="metric" title="steady-state output rate after the first token">decode <b>${last.decodeTps.toFixed(0)}</b> tok/s</span>`);
         if (last.score) parts.push(`<span class="metric">score <b class="${last.score.cls}">${last.score.label}</b></span>`);
       }
       if (s.stalled) parts.push(`<span class="metric" style="color:var(--warn)">⚠️ no tokens ${(s.silentMs / 1000).toFixed(0)}s — stalled?</span>`);
@@ -1940,17 +2277,24 @@ ${toolsJson}`;
       return api;
     }
 
-    async function runModel(model, card) {
-      const iterations = parseInt($('#iterations').value, 10) || 1;
-      const maxTokens = parseInt($('#maxTokens').value, 10) || 256;
-      const retain = $('#retainHistory').checked;
+    /* Run one model on one prompt. `opts` lets a caller override any of the
+       step-1 settings — the context sweep uses it to run the same model several
+       times with a padded prompt, a small output cap and no retained context,
+       presenting each size as its own labelled result. */
+    async function runModel(model, card, opts = {}) {
+      const iterations = opts.iterations != null ? opts.iterations : (parseInt($('#iterations').value, 10) || 1);
+      const maxTokens = opts.maxTokens != null ? opts.maxTokens : (parseInt($('#maxTokens').value, 10) || 256);
+      const retain = opts.retain != null ? opts.retain : $('#retainHistory').checked;
       const sysPrompt = $('#sysPrompt').value.trim();
       const mode = currentMode();
       const rawPrompt = $('#userPrompt').value.trim();
       const file = contextFile || $('#fileInput').files[0];
       const fileText = file ? `\n\n--- [File: ${file.name}] ---\n${await file.text()}\n--- [End File] ---\n` : '';
-      // Vision mode derives its prompt from the task picker (or a custom prompt).
-      const userPrompt = mode === 'vision' ? visionPrompt() : rawPrompt + fileText;
+      // A sweep supplies an already-padded prompt; otherwise vision derives its
+      // prompt from the task picker and other shapes append any dropped file.
+      const userPrompt = opts.userPrompt != null ? opts.userPrompt
+        : (mode === 'vision' ? visionPrompt() : rawPrompt + fileText);
+      const runLabel = opts.label || model.label;
 
       let toolsJson = '[]', toolsList = [];
       if (mode === 'tool') {
@@ -1966,8 +2310,9 @@ ${toolsJson}`;
       const expectedKeywords = expectedKind === 'keywords'
         ? expected.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
 
-      const result = { modelId: model.id, label: model.label, engine: model.engine, params: model.params,
-                       outputs: [], durations: [], tokens: [], status: 'ok', error: null,
+      const result = { modelId: model.id, label: runLabel, baseLabel: model.label, engine: model.engine, params: model.params,
+                       sweepSize: opts.sweepSize != null ? opts.sweepSize : null,
+                       outputs: [], durations: [], tokens: [], stages: [], loadMs: null, status: 'ok', error: null,
                        scores: [], expectedKind: expectedKind };
 
       // Live telemetry for this card: state, timing, throughput, runtime facts.
@@ -1977,7 +2322,7 @@ ${toolsJson}`;
         streamed: 0, lastProgressAt: performance.now(), silentMs: 0, stalled: false, done: false,
         error: null, watchStall: false, last: null });
       renderCardLive(card);
-      log(`▶ ${model.label} (${ENGINES[model.engine].name}) — loading…`);
+      log(`▶ ${runLabel} (${ENGINES[model.engine].name}) — loading…`);
 
       try {
         card.setState('running', '<span class="spinner"></span> loading…');
@@ -1989,7 +2334,8 @@ ${toolsJson}`;
         else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
         else if (model.engine === 'needle') adapter = await adapterNeedle(model, card);
         else throw new Error('Unknown engine: ' + model.engine);
-        log(`✔ ${model.label} ready in ${fmt((performance.now() - loadStart) / 1000)}s` + (sessions[model.id] ? '' : ' (shared)'), 'ok');
+        result.loadMs = performance.now() - loadStart;
+        log(`✔ ${runLabel} ready in ${fmt(result.loadMs / 1000)}s` + (sessions[model.id] ? '' : ' (shared)'), 'ok');
 
         for (let i = 0; i < iterations; i++) {
           if (stopped) throw new Error('stopped');
@@ -2006,8 +2352,8 @@ ${toolsJson}`;
           s.stalled = false;
           s.silentMs = 0;
           s.watchStall = streaming;
-          log(`… ${model.label} iteration ${i + 1}/${iterations} — generating (cap ${maxTokens} tok)`);
-          let text = '', tokens = 0, extra = null;
+          log(`… ${runLabel} iteration ${i + 1}/${iterations} — generating (cap ${maxTokens} tok)`);
+          let text = '', tokens = 0, extra = null, ttftMs = null, promptTokens = null;
 
           if (model.engine === 'needle') {
             const r = adapter.run(userPrompt, sysPrompt, toolsJson, maxTokens);
@@ -2022,26 +2368,28 @@ ${toolsJson}`;
           } else if (model.engine === 'transformers') {
             const { messages, tools } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
             const r = await adapter.generate(messages, { tools, maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); noteProgress(card); } });
-            text = r.text; tokens = r.tokens;
+            text = r.text; tokens = r.tokens; ttftMs = r.ttftMs ?? null; promptTokens = r.promptTokens ?? null;
             if (!text) card.stream('(empty output)');
           } else if (model.engine === 'vision') {
             if (!visionImage) throw new Error('No image selected — add one on step 1 (Vision mode).');
             const r = await adapter.generate(visionImage, userPrompt, sysPrompt, {
               maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); noteProgress(card); },
             });
-            text = r.text; tokens = r.tokens;
+            text = r.text; tokens = r.tokens; ttftMs = r.ttftMs ?? null; promptTokens = r.promptTokens ?? null;
             if (!text) card.stream('(empty output)');
           } else if (model.engine === 'webllm') {
             const { messages } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
             const r = await adapter.chat(messages, { maxTokens, onToken: t => { card.stream(t); noteProgress(card); } });
-            text = r.text; tokens = r.tokens;
+            text = r.text; tokens = r.tokens; ttftMs = r.ttftMs ?? null; promptTokens = r.promptTokens ?? null;
             if (!text) card.stream('(empty output)');
           }
 
           const ms = (performance.now() - start) / 1000;
+          const stage = makeStage({ genMs: ms * 1000, ttftMs, promptTokens, promptChars: userPrompt.length, tokens, extra });
           result.outputs.push(text);
           result.durations.push(ms);
           result.tokens.push(tokens);
+          result.stages.push(stage);
 
           let score = null;
           if (expectedKind) {
@@ -2064,12 +2412,13 @@ ${toolsJson}`;
           s.stalled = false;
           s.last = {
             ms, chars: text.length, tokens, diff, prev, text, score,
+            ttft: stage.ttftMs,
+            promptTps: stage.promptTps,
+            decodeTps: stage.decodeTps,
             confidence: extra && extra.confidence != null ? extra.confidence : null,
-            prefill: extra && extra.prefill_tps ? extra.prefill_tps : null,
-            decode: extra && extra.decode_tps ? extra.decode_tps : null,
           };
           renderCardLive(card);
-          log(`✔ ${model.label} iter ${i + 1}/${iterations} — ${tokens} ~tok in ${fmt(ms)}s (${tps.toFixed(1)} tok/s)`
+          log(`✔ ${runLabel} iter ${i + 1}/${iterations} — ${tokens} ~tok in ${fmt(ms)}s (${tps.toFixed(1)} tok/s)`
             + (score ? ` · score ${score.label}` : ''), 'ok');
         }
 
@@ -2091,7 +2440,7 @@ ${toolsJson}`;
         s.watchStall = false;
         renderCardLive(card);
         card.setState(err.message === 'stopped' ? 'warn' : 'error', err.message === 'stopped' ? '⏹ stopped' : '❌ ' + escHTML(err.message));
-        log(`✖ ${model.label} — ${err.message}`, err.message === 'stopped' ? 'warn' : 'err');
+        log(`✖ ${runLabel} — ${err.message}`, err.message === 'stopped' ? 'warn' : 'err');
         throw err;
       }
       return result;
@@ -2118,7 +2467,7 @@ ${toolsJson}`;
         engine: st.model.engine,
         params: st.model.params,
         stepIndex: t, stepPrompt: st.prompt, contextRule: st.context,
-        outputs: [], durations: [], tokens: [], scores: [], status: 'ok', error: null,
+        outputs: [], durations: [], tokens: [], stages: [], loadMs: null, scores: [], status: 'ok', error: null,
         expectedKind: specs[t] ? (/^[\[{]/.test(specs[t]) ? 'tool' : 'keywords') : null,
       }));
       const adapters = new Array(steps.length).fill(null);
@@ -2145,7 +2494,8 @@ ${toolsJson}`;
               else if (model.engine === 'transformers') adapters[t] = await adapterTransformers(model, card);
               else if (model.engine === 'webllm') adapters[t] = await adapterWebLLM(model, card);
               else throw new Error(`step ${t + 1} needs a chat model — pick a built-in, Transformers.js or WebGPU model.`);
-              log(`✔ Step ${t + 1} · ${model.label} ready in ${fmt((performance.now() - loadStart) / 1000)}s`, 'ok');
+              results[t].loadMs = performance.now() - loadStart;
+              log(`✔ Step ${t + 1} · ${model.label} ready in ${fmt(results[t].loadMs / 1000)}s`, 'ok');
             }
             const adapter = adapters[t];
 
@@ -2169,7 +2519,7 @@ ${toolsJson}`;
               + `context: ${(CHAIN_CONTEXT[step.context] || CHAIN_CONTEXT.all).label}`);
 
             const start = performance.now();
-            let text = '', tokens = 0;
+            let text = '', tokens = 0, ttftMs = null, promptTokens = null;
             if (model.engine === 'builtin') {
               text = await adapter.session.prompt(userPrompt);
               card.stream(text);
@@ -2181,15 +2531,17 @@ ${toolsJson}`;
               const r = model.engine === 'webllm'
                 ? await adapter.chat(messages, { maxTokens, onToken })
                 : await adapter.generate(messages, { tools, maxTokens, onToken });
-              text = r.text; tokens = r.tokens;
+              text = r.text; tokens = r.tokens; ttftMs = r.ttftMs ?? null; promptTokens = r.promptTokens ?? null;
               if (!text) card.stream('(empty output)');
             }
             const ms = (performance.now() - start) / 1000;
+            const stage = makeStage({ genMs: ms * 1000, ttftMs, promptTokens, promptChars: userPrompt.length, tokens, extra: null });
             outputs.push(text);
             const res = results[t];
             res.outputs.push(text);
             res.durations.push(ms);
             res.tokens.push(tokens);
+            res.stages.push(stage);
 
             let score = null;
             if (specs[t]) {
@@ -2206,7 +2558,8 @@ ${toolsJson}`;
             s.tps = tps;
             s.heap = heapMB();
             s.watchStall = false; s.stalled = false;
-            s.last = { ms, chars: text.length, tokens, diff, prev: prevOut, text, score, step: t + 1 };
+            s.last = { ms, chars: text.length, tokens, diff, prev: prevOut, text, score, step: t + 1,
+              ttft: stage.ttftMs, promptTps: stage.promptTps, decodeTps: stage.decodeTps };
             renderCardLive(card);
             log(`✔ step ${t + 1}/${steps.length} (${model.label}) run ${i + 1}/${iterations} — ${tokens} ~tok in ${fmt(ms)}s`
               + (score ? ` · score ${score.label}` : ''), 'ok');
@@ -2348,6 +2701,7 @@ ${toolsJson}`;
     async function runBench() {
       if (running) return;
       const chainShape = runShape === 'chain';
+      const sweepShape = runShape === 'sweep';
       // Validate step 1 inputs first, and resolve the pipeline if we're running one.
       let steps = null;
       try {
@@ -2363,6 +2717,9 @@ ${toolsJson}`;
           });
           const missing = steps.filter(st => !modelReady(st.model));
           if (missing.length) throw new Error('Download these models first: ' + [...new Set(missing.map(s => s.model.label))].join(', ') + '.');
+        } else if (sweepShape) {
+          if (!($('#userPrompt').value.trim())) throw new Error('Enter the prompt to sweep over context on step 1.');
+          if (!(prefs.sweepSizes || []).length) throw new Error('Pick at least one context size on step 1.');
         } else if (currentMode() === 'vision') {
           if (!visionImage) throw new Error('Select an image on step 1 (Vision mode).');
         } else if (!($('#userPrompt').value.trim())) {
@@ -2396,14 +2753,20 @@ ${toolsJson}`;
       goStep(3);
       $('#runBtn').disabled = true;
       $('#stopBtn').disabled = false;
+      const sweepSizes = sweepShape ? (prefs.sweepSizes || []).slice().sort((a, b) => a - b) : [];
+      const sweepTokens = sweepShape ? (prefs.sweepTokens || DEFAULT_SWEEP_TOKENS) : null;
       $('#benchStatus').textContent = chainShape
         ? `Running a ${steps.length}-step pipeline…`
-        : `Running ${selected.length} model(s) side-by-side…`;
+        : sweepShape
+          ? `Sweeping ${selected.length} model(s) across ${sweepSizes.length} context sizes…`
+          : `Running ${selected.length} model(s) side-by-side…`;
       const dev = deviceFacts();
-      log(`═ RUN START ═ shape=${runShape}${chainShape ? '' : ' · mode=' + currentMode()} · ` +
+      log(`═ RUN START ═ shape=${runShape}${chainShape || sweepShape ? '' : ' · mode=' + currentMode()} · ` +
           (chainShape
             ? `pipeline=${steps.map((st, i) => `[${i + 1}] ${st.model.label} (${(CHAIN_CONTEXT[st.context] || CHAIN_CONTEXT.all).label})`).join(' → ')} · `
-            : `models=${selected.map(m => m.label).join(', ')} · `) +
+            : sweepShape
+              ? `models=${selected.map(m => m.label).join(', ')} · sizes=${sweepSizes.map(sizeLabel).join(', ')} · outTokens=${sweepTokens} · `
+              : `models=${selected.map(m => m.label).join(', ')} · `) +
           `iterations=${iterations} · maxTokens=${maxTokens} · retain=${retain} · ` +
           `cores=${dev.cores || '?'} · deviceRAM=${dev.ramGB ? dev.ramGB + 'GB' : '?'}`);
 
@@ -2424,6 +2787,22 @@ ${toolsJson}`;
           renderCardLive(card);
           currentCards['step-' + t] = card;
         });
+      } else if (sweepShape) {
+        // One card per model per context size, so each step of the sweep streams
+        // (and is measured) on its own.
+        selected.forEach(m => {
+          sweepSizes.forEach(size => {
+            const card = cardUI(m);
+            const nameEl = card.el.querySelector('.mc-name');
+            if (nameEl) nameEl.textContent = `${m.label} · ${sizeLabel(size)}`;
+            card.setStatus(`context ≈ ${sizeLabel(size)}`);
+            grid.appendChild(card.el);
+            card.stat.phase = 'queued';
+            card.stat.startedAt = performance.now();
+            renderCardLive(card);
+            currentCards[`${m.id}::${size}`] = card;
+          });
+        });
       } else {
         selected.forEach(m => {
           const card = cardUI(m);
@@ -2439,6 +2818,7 @@ ${toolsJson}`;
       if (!$('#retainHistory').checked) { log('Retain Context is off — dropping cached sessions before the run.'); resetSessions(); }
 
       let results;
+      let sweepBase = '';
       if (chainShape) {
         const cards = steps.map((_, t) => currentCards['step-' + t]);
         const stepResults = await runPipeline(steps, cards, { iterations, maxTokens, retain, sysPrompt: $('#sysPrompt').value.trim() });
@@ -2446,6 +2826,34 @@ ${toolsJson}`;
         // output so it can't overwrite the fresh slate.
         if (myGen !== runGeneration) return;
         results = stepResults.map(res => ({ model: modelById(res.modelId), res }));
+      } else if (sweepShape) {
+        // One model at a time, sizes ascending: the model loads once (sessions
+        // are cached by id) and stays resident for every size in its sweep.
+        const f = contextFile || $('#fileInput').files[0];
+        const fileText = f ? `\n\n--- [File: ${f.name}] ---\n${await f.text()}\n--- [End File] ---\n` : '';
+        sweepBase = $('#userPrompt').value.trim() + fileText;
+        const out = [];
+        for (const m of selected) {
+          for (const size of sweepSizes) {
+            if (stopped) break;
+            const card = currentCards[`${m.id}::${size}`];
+            try {
+              const res = await runModel(m, card, {
+                userPrompt: buildSweepPrompt(sweepBase, size),
+                label: `${m.label} · ${sizeLabel(size)}`,
+                sweepSize: size,
+                maxTokens: sweepTokens,
+                iterations: 1,
+                retain: false,
+              });
+              if (myGen !== runGeneration) return;
+              out.push({ model: m, res });
+            } catch (err) {
+              out.push({ model: m, res: null, err });
+            }
+          }
+        }
+        results = out.filter(v => v && v.res);
       } else {
         const tasks = selected.map(m =>
           runModel(m, currentCards[m.id]).then(res => ({ model: m, res })).catch(err => ({ model: m, res: null, err }))
@@ -2479,9 +2887,19 @@ ${toolsJson}`;
       okResults.forEach(r => (r.res.scores || []).forEach(x => {
         if (x.tier === 'pass') pass++; else if (x.tier === 'partial') partial++; else fail++;
       }));
+      // Stage timings averaged across every turn of every model in this run.
+      const allStages = okResults.flatMap(r => r.res.stages || []);
+      const avgStage = key => {
+        const vals = allStages.map(s => s && s[key]).filter(v => v != null && isFinite(v));
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      const avgTtftMs = avgStage('ttftMs');
+      const avgPrefillTps = avgStage('promptTps');
+      const avgDecodeTps = avgStage('decodeTps');
       const stats = {
         iterations, totalTokens, avgTps: totalTime > 0 ? totalTokens / totalTime : 0,
         pass, partial, fail, scored: pass + partial + fail,
+        avgTtftMs, avgPrefillTps, avgDecodeTps,
         peakHeapMB: runPeakHeap || null,
         cores: dev.cores, ramGB: dev.ramGB,
       };
@@ -2489,14 +2907,17 @@ ${toolsJson}`;
       const entry = {
         datetime: new Date().toLocaleString(),
         shape: runShape,
-        mode: chainShape ? 'chat' : currentMode(),
+        mode: (chainShape || sweepShape) ? 'chat' : currentMode(),
         sysPrompt: $('#sysPrompt').value.trim(),
         userPrompt: chainShape
           ? `${steps.length}-step pipeline · ${steps[0].prompt}`
-          : $('#userPrompt').value.trim(),
+          : sweepShape
+            ? `context sweep ${sweepSizes.map(sizeLabel).join('/')} · ${$('#userPrompt').value.trim()}`
+            : $('#userPrompt').value.trim(),
         chain: chainShape
           ? steps.map(st => ({ modelId: st.model.id, modelLabel: st.model.label, prompt: st.prompt, context: st.context, expects: st.expects }))
           : null,
+        sweep: sweepShape ? { sizes: sweepSizes, outputTokens: sweepTokens } : null,
         toolsJson: (!chainShape && currentMode() === 'tool') ? $('#toolsJson').value : '',
         expectedOutput: $('#expectedOutput').value.trim(),
         maxTokens,
@@ -2513,10 +2934,13 @@ ${toolsJson}`;
       renderScoreboard();
       updateRunSummaryBar();
       $('#benchStatus').textContent = `Finished ${okResults.length}/${results.length} ` +
-        (chainShape ? 'step(s)' : 'model(s)') + ` — ${pass}✓ ${partial}~ ${fail}✗`;
+        (chainShape ? 'step(s)' : sweepShape ? 'size pass(es)' : 'model(s)') + ` — ${pass}✓ ${partial}~ ${fail}✗`;
       log(`═ RUN COMPLETE ═ ${okResults.length}/${results.length} ok · ${totalTokens} ~tok · ` +
-          `${stats.avgTps.toFixed(1)} tok/s avg · ${pass}✓/${partial}~/${fail}✗ · ` +
-          `peak heap ${runPeakHeap ? runPeakHeap.toFixed(0) + 'MB' : 'n/a'}`,
+          `${stats.avgTps.toFixed(1)} tok/s avg · ` +
+          `TTFT ${avgTtftMs != null ? fmt(avgTtftMs / 1000) + 's' : 'n/a'} · ` +
+          `prefill ${avgPrefillTps != null ? avgPrefillTps.toFixed(0) + ' tok/s' : 'n/a'} · ` +
+          `decode ${avgDecodeTps != null ? avgDecodeTps.toFixed(0) + ' tok/s' : 'n/a'} · ` +
+          `${pass}✓/${partial}~/${fail}✗ · peak heap ${runPeakHeap ? runPeakHeap.toFixed(0) + 'MB' : 'n/a'}`,
           okResults.length === results.length ? 'ok' : 'warn');
     }
 
@@ -2531,12 +2955,14 @@ ${toolsJson}`;
       currentBatchEntry = null;
       currentBatch = -1;
       $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p>';
-      $('#summaryTable tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr>';
+      $('#summaryTable tbody').innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--muted);">No run yet.</td></tr>';
       $('#scoreboardSection').style.display = 'none';
       $('#scoreboardBody').innerHTML = '';
       $('#runBtn').disabled = false;
       $('#stopBtn').disabled = true;
       ['printMode', 'printSys', 'printUser', 'printTools'].forEach(id => { const el = $('#' + id); if (el) el.textContent = ''; });
+      renderStageTable(null);
+      renderSweepTable(null);
       updateRunSummaryBar();
       $('#benchStatus').textContent = 'Idle — configure a test to begin.';
     }
@@ -2615,22 +3041,104 @@ ${toolsJson}`;
       }).join('');
     }
 
+    /* Average stage timings for one saved model result (nulls where never
+       measured — e.g. non-streaming engines that can't expose a first token). */
+    function stageAverages(m) {
+      return {
+        loadMs: m && m.loadMs != null ? m.loadMs : null,
+        ttftMs: avgStageValue(m, 'ttftMs'),
+        promptTokens: avgStageValue(m, 'promptTokens'),
+        promptTps: avgStageValue(m, 'promptTps'),
+        decodeTps: avgStageValue(m, 'decodeTps'),
+      };
+    }
+
+    // Run-wide stage averages for a saved batch, derived from the models when a
+    // stored summary isn't present (older runs have no `stages` at all).
+    function entryStageAverages(entry) {
+      const acc = { ttftMs: [], promptTps: [], decodeTps: [] };
+      (entry && entry.models ? entry.models : []).forEach(m => {
+        const a = stageAverages(m);
+        if (a.ttftMs != null) acc.ttftMs.push(a.ttftMs);
+        if (a.promptTps != null) acc.promptTps.push(a.promptTps);
+        if (a.decodeTps != null) acc.decodeTps.push(a.decodeTps);
+      });
+      const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+      return { ttftMs: mean(acc.ttftMs), promptTps: mean(acc.promptTps), decodeTps: mean(acc.decodeTps) };
+    }
+
+    // The "where did the time go" table in the printable report: load, time to
+    // first token, prompt-processing and steady-state decode rate per model.
+    function renderStageTable(entry) {
+      const tb = $('#printStagesBody');
+      if (!tb) return;
+      if (!entry || !entry.models || !entry.models.length) {
+        tb.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted);">No run yet.</td></tr>';
+        return;
+      }
+      const cell = v => v != null ? v : '<span class="hint">–</span>';
+      tb.innerHTML = entry.models.map(m => {
+        const a = stageAverages(m);
+        return `<tr>
+          <td>${escHTML(m.label)}</td>
+          <td>${cell(a.loadMs != null ? fmt(a.loadMs / 1000) : null)}</td>
+          <td>${cell(a.ttftMs != null ? fmt(a.ttftMs / 1000) : null)}</td>
+          <td>${cell(a.promptTps != null ? a.promptTps.toFixed(0) : null)}</td>
+          <td>${cell(a.decodeTps != null ? a.decodeTps.toFixed(1) : null)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    /* The context-sweep report: one row per (model, context size). TTFT and
+       prefill rate against the target size is the whole point of the shape —
+       decode speed alone would hide the wall. */
+    function renderSweepTable(entry) {
+      const section = $('#sweepSection');
+      const tb = $('#sweepBody');
+      if (!section || !tb) return;
+      const rows = (entry && entry.models ? entry.models : []).filter(m => m.sweepSize != null);
+      if (!rows.length) { section.style.display = 'none'; tb.innerHTML = ''; return; }
+      section.style.display = '';
+      rows.sort((a, b) => String(a.baseLabel || a.label).localeCompare(String(b.baseLabel || b.label))
+        || a.sweepSize - b.sweepSize);
+      const cell = v => v != null ? v : '<span class="hint">–</span>';
+      tb.innerHTML = rows.map(m => {
+        const a = stageAverages(m);
+        const toks = m.tokens || [];
+        const outTok = toks.length ? Math.round(toks.reduce((x, y) => x + (y || 0), 0) / toks.length) : null;
+        const cells = m.status === 'ok'
+          ? `<td>${cell(a.promptTokens != null ? Math.round(a.promptTokens) : null)}</td>
+             <td>${cell(a.ttftMs != null ? fmt(a.ttftMs / 1000) : null)}</td>
+             <td>${cell(a.promptTps != null ? a.promptTps.toFixed(0) : null)}</td>
+             <td>${cell(a.decodeTps != null ? a.decodeTps.toFixed(1) : null)}</td>
+             <td>${cell(outTok)}</td>`
+          : `<td colspan="5" style="color:var(--danger);">❌ ${escHTML(m.error || m.status)}</td>`;
+        return `<tr class="sweep-row">
+          <td><b>${escHTML(m.baseLabel || m.label)}</b></td>
+          <td>${escHTML(sizeLabel(m.sweepSize))}</td>
+          ${cells}
+        </tr>`;
+      }).join('');
+    }
+
     function renderSummary(entry) {
       const tbody = $('#summaryTable tbody');
-      if (!entry || !entry.models.length) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr>'; return; }
+      if (!entry || !entry.models.length) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--muted);">No run yet.</td></tr>'; renderStageTable(null); renderSweepTable(null); return; }
       const rows = entry.models.map(m => {
         const last = m.outputs.length - 1;
         const dur = m.durations[last] || 0;
         const toks = m.tokens[last] || 0;
         const text = m.outputs[last] || '';
         const tps = toks / Math.max(dur, 0.001);
-        return { m, dur, toks, text, tps };
+        const stage = (m.stages || [])[last] || null;
+        return { m, dur, toks, text, tps, stage };
       }).sort((a, b) => a.dur - b.dur);
       const fastest = rows[0];
       tbody.innerHTML = rows.map(r => {
         const prev = previousOutputFor(r.m.modelId, entry);
         const diff = prev !== undefined && prev !== null && r.m.outputs.length ? diffPercent(prev, r.m.outputs[r.m.outputs.length - 1]) : null;
         const sc = scoreOf(r.m);
+        const st = r.stage;
         return `<tr>
           <td><b>${escHTML(r.m.label)}</b></td>
           <td>${ENGINES[r.m.engine].name}</td>
@@ -2638,12 +3146,17 @@ ${toolsJson}`;
           <td>${r.m.status === 'ok' ? '✅' : '❌ ' + escHTML(r.m.error || r.m.status)}</td>
           <td>${sc ? `<span class="${sc.cls}" title="${escHTML(sc.detail || '')}">${sc.label}</span>` : '<span class="hint">–</span>'}</td>
           <td>${r === fastest ? '🏆 ' : ''}${fmt(r.dur)}</td>
+          <td>${st && st.ttftMs != null ? fmt(st.ttftMs / 1000) : '<span class="hint">–</span>'}</td>
+          <td>${st && st.promptTps != null ? st.promptTps.toFixed(0) : '<span class="hint">–</span>'}</td>
+          <td>${st && st.decodeTps != null ? st.decodeTps.toFixed(1) : '<span class="hint">–</span>'}</td>
           <td>${r.text.length}</td>
           <td>${r.toks}</td>
           <td>${r.tps.toFixed(1)}</td>
           <td>${diff !== null ? '<span class="diff-badge">' + diff + '%</span>' : '-'}</td>
         </tr>`;
       }).join('');
+      renderStageTable(entry);
+      renderSweepTable(entry);
     }
 
     /* ============================================================
@@ -2659,17 +3172,24 @@ ${toolsJson}`;
 
     function renderHistory() {
       const tbody = $('#historyBody');
-      tbody.innerHTML = runHistory.length ? '' : '<tr><td colspan="10" style="text-align:center;">No runs recorded yet.</td></tr>';
+      tbody.innerHTML = runHistory.length ? '' : '<tr><td colspan="12" style="text-align:center;">No runs recorded yet.</td></tr>';
 
       if (runHistory.length) {
         const e = runHistory[0];
         const cap = CAPABILITIES[e.mode];
         $('#printMode').textContent = e.shape === 'chain'
           ? `${SHAPES.chain.name} (${(e.chain || []).length} step${(e.chain || []).length === 1 ? '' : 's'})`
-          : (cap ? cap.name : e.mode);
+          : e.shape === 'sweep'
+            ? `${SHAPES.sweep.name} (${((e.sweep || {}).sizes || []).map(sizeLabel).join(' / ')})`
+            : (cap ? cap.name : e.mode);
         $('#printSys').textContent = e.sysPrompt || 'None';
         $('#printUser').textContent = e.userPrompt || 'None';
         $('#printTools').textContent = e.toolsJson || 'None';
+        renderStageTable(e);
+        renderSweepTable(e);
+      } else {
+        renderStageTable(null);
+        renderSweepTable(null);
       }
 
       runHistory.forEach((batch, i) => {
@@ -2687,6 +3207,11 @@ ${toolsJson}`;
         // Newer batches carry a precomputed telemetry summary; older saved ones
         // are derived on the fly so the table never blanks out.
         const st = batch.stats || {};
+        // Stage averages: prefer the stored run summary, else derive from the
+        // per-model `stages` (absent on runs recorded before stage timing).
+        const stageAvg = entryStageAverages(batch);
+        const ttftMs = st.avgTtftMs != null ? st.avgTtftMs : stageAvg.ttftMs;
+        const prefillTps = st.avgPrefillTps != null ? st.avgPrefillTps : stageAvg.promptTps;
         const iterations = st.iterations || batch.iterations || 1;
         const totalTokens = st.totalTokens != null
           ? st.totalTokens
@@ -2703,11 +3228,15 @@ ${toolsJson}`;
           <td>${escHTML(batch.datetime || '')}</td>
           <td>${batch.shape === 'chain'
             ? `${SHAPES.chain.icon} chain`
-            : ((CAPABILITIES[batch.mode] ? CAPABILITIES[batch.mode].icon + ' ' : '') + escHTML(batch.mode))}</td>
+            : batch.shape === 'sweep'
+              ? `${SHAPES.sweep.icon} sweep`
+              : ((CAPABILITIES[batch.mode] ? CAPABILITIES[batch.mode].icon + ' ' : '') + escHTML(batch.mode))}</td>
           <td>${batch.models.length}</td>
           <td>${iterations}</td>
           <td>${fmt(avgDur)}</td>
           <td>${avgTps ? avgTps.toFixed(1) : '<span class="hint">–</span>'}</td>
+          <td>${ttftMs != null ? fmt(ttftMs / 1000) : '<span class="hint">–</span>'}</td>
+          <td>${prefillTps != null ? prefillTps.toFixed(0) : '<span class="hint">–</span>'}</td>
           <td>${totalTokens}</td>
           <td>${ppf}</td>
           <td>${heap}</td>
@@ -2738,10 +3267,14 @@ ${toolsJson}`;
           const tps = (m.tokens[last] || 0) / Math.max(m.durations[last] || 0, 0.001);
           const sc = (m.scores || [])[last];
           const bs = batch.stats || {};
+          const stage = (m.stages || [])[last] || null;
           card.metrics(`<span class="metric">⏱️ <b>${fmt(m.durations[last] || 0)}s</b></span>
             <span class="metric">chars <b>${(m.outputs[last] || '').length}</b></span>
             <span class="metric">~tok <b>${m.tokens[last] || 0}</b></span>
             <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
+            ${stage && stage.ttftMs != null ? `<span class="metric" title="time to first token">TTFT <b>${fmt(stage.ttftMs / 1000)}s</b></span>` : ''}
+            ${stage && stage.promptTps != null ? `<span class="metric" title="prompt/prefill processing rate">prefill <b>${stage.promptTps.toFixed(0)}</b> tok/s</span>` : ''}
+            ${stage && stage.decodeTps != null ? `<span class="metric" title="steady-state output rate">decode <b>${stage.decodeTps.toFixed(1)}</b> tok/s</span>` : ''}
             ${bs.cores ? `<span class="metric" title="logical cores reported by the browser">cores <b>${bs.cores}</b></span>` : ''}
             ${bs.ramGB ? `<span class="metric" title="device memory reported by the browser">RAM <b>${bs.ramGB}GB</b></span>` : ''}
             ${bs.peakHeapMB ? `<span class="metric" title="peak JS heap during the run">peak heap <b>${bs.peakHeapMB.toFixed(0)}MB</b></span>` : ''}
@@ -2761,7 +3294,7 @@ ${toolsJson}`;
       const esc = str => `"${(str || '').toString().replace(/"/g, '""')}"`;
       const latest = runHistory[0];
       const header = `Mode,${esc(latest.mode)}\nSystem Prompt,${esc(latest.sysPrompt)}\nUser Prompt,${esc(latest.userPrompt)}\nTools,${esc(latest.toolsJson)}\n\n`;
-      const cols = 'Date/Time,Model,Engine,Params,Iteration,Turn,Time (s),~Tokens,~tok/s,Score,Score Detail,Output\n';
+      const cols = 'Date/Time,Model,Engine,Params,Iteration,Turn,Time (s),TTFT (s),Prompt ~tok/s,Decode ~tok/s,Prompt ~tok,~Tokens,~tok/s,Score,Score Detail,Output\n';
       const rows = runHistory.flatMap(batch =>
         batch.models.flatMap(m =>
           m.outputs.map((out, i) => {
@@ -2769,10 +3302,16 @@ ${toolsJson}`;
             const turns = (m.turns && m.turns[i])
               ? m.turns[i]
               : [{ text: out, tokens: m.tokens[i] || 0, ms: m.durations[i] || 0, score: (m.scores || [])[i] }];
+            const stage = (m.stages && m.stages[i]) || {};
             return turns.map((t, ti) => {
               const sc = t.score || null;
               return [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1, ti + 1,
-               (t.ms || 0).toFixed(2), t.tokens || 0,
+               (t.ms || 0).toFixed(2),
+               stage.ttftMs != null ? (stage.ttftMs / 1000).toFixed(2) : '',
+               stage.promptTps != null ? stage.promptTps.toFixed(1) : '',
+               stage.decodeTps != null ? stage.decodeTps.toFixed(1) : '',
+               stage.promptTokens != null ? Math.round(stage.promptTokens) : '',
+               t.tokens || 0,
                ((t.tokens || 0) / Math.max(t.ms || 0, 0.001)).toFixed(1),
                sc ? sc.tier : '', sc ? sc.detail : '', t.text].map(esc).join(',');
             }).join('\n');
@@ -2806,12 +3345,16 @@ ${toolsJson}`;
     function syncModePanels() {
       const mode = currentMode();
       const chainShape = runShape === 'chain';
+      const sweepShape = runShape === 'sweep';
+      // A chain and a sweep both fix the task to chat, so neither shows the
+      // capability panels or the task-type picker.
+      const fixedShape = chainShape || sweepShape;
       // Only the panel owned by the active capability is shown; driven off the
       // registry so a new capability is a one-line addition. A chain uses its
       // own per-step editor instead of any capability panel.
       CAPABILITY_ORDER.forEach(k => {
         const sel = CAPABILITIES[k].panel;
-        if (sel) $(sel).style.display = (!chainShape && k === mode) ? 'flex' : 'none';
+        if (sel) $(sel).style.display = (!fixedShape && k === mode) ? 'flex' : 'none';
       });
       const note = $('#capNote');
       if (note) {
@@ -2820,15 +3363,17 @@ ${toolsJson}`;
       }
       const chainPanel = $('#chainPanel');
       if (chainPanel) chainPanel.style.display = chainShape ? 'flex' : 'none';
+      const sweepPanel = $('#sweepPanel');
+      if (sweepPanel) sweepPanel.style.display = sweepShape ? 'flex' : 'none';
       // A chain replaces the single user prompt (and file context) with its own
-      // ordered step list.
+      // ordered step list; a sweep keeps it as the base prompt it pads out.
       ['#userPromptBlock', '#fileDropField'].forEach(sel => {
         const el = $(sel);
         if (el) el.style.display = chainShape ? 'none' : '';
       });
-      // Task type only applies to single/compare runs; a pipeline runs chat turns.
+      // Task type only applies to single/compare runs; a pipeline or sweep runs chat turns.
       const taskBlock = $('#taskTypeBlock');
-      if (taskBlock) taskBlock.style.display = chainShape ? 'none' : '';
+      if (taskBlock) taskBlock.style.display = fixedShape ? 'none' : '';
     }
 
     /* Run-shape picker (step 1) — rendered from SHAPES. */
@@ -2850,20 +3395,72 @@ ${toolsJson}`;
       });
       const note = $('#shapeNote');
       if (note) note.textContent = chainShapeNote();
+      renderSweepPanel();
     }
 
     function chainShapeNote() {
       if (runShape === 'chain') return 'A pipeline runs each step in order; steps can use different models. Define the steps below.';
+      if (runShape === 'sweep') return 'Pick one or more models on the next step — each is run once at every context size you chose below.';
       if (runShape === 'single') return 'Pick exactly one model on the next step.';
       return 'Pick one or more models on the next step; they all get the same prompt.';
+    }
+
+    /* Sweep settings (step 1): toggle chips for the sizes, plus the per-size
+       output cap. Stored in prefs so a chosen sweep survives a reload. */
+    function renderSweepPanel() {
+      const host = $('#sweepChips');
+      if (host) {
+        host.innerHTML = '';
+        SWEEP_PRESETS.forEach(n => {
+          const on = (prefs.sweepSizes || []).includes(n);
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'sweep-chip' + (on ? ' active' : '');
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          b.textContent = sizeLabel(n);
+          b.title = `Pad the prompt to about ${n.toLocaleString()} tokens`;
+          b.onclick = () => {
+            const set = new Set(prefs.sweepSizes || []);
+            if (set.has(n)) { if (set.size > 1) set.delete(n); } else set.add(n);
+            prefs.sweepSizes = [...set].sort((a, b) => a - b);
+            savePrefs();
+            renderSweepPanel();
+          };
+          host.appendChild(b);
+        });
+      }
+      const tokEl = $('#sweepTokens');
+      if (tokEl) {
+        if (document.activeElement !== tokEl) tokEl.value = prefs.sweepTokens || DEFAULT_SWEEP_TOKENS;
+        tokEl.onchange = () => {
+          const v = parseInt(tokEl.value, 10);
+          prefs.sweepTokens = (isFinite(v) && v > 0) ? Math.min(512, v) : DEFAULT_SWEEP_TOKENS;
+          tokEl.value = prefs.sweepTokens;
+          savePrefs();
+          renderSweepEstimate();
+        };
+      }
+      renderSweepEstimate();
+    }
+
+    function renderSweepEstimate() {
+      const el = $('#sweepEstimate');
+      if (!el) return;
+      const sizes = prefs.sweepSizes || [];
+      const tok = prefs.sweepTokens || DEFAULT_SWEEP_TOKENS;
+      if (!sizes.length) { el.textContent = '⚠️ Pick at least one context size.'; return; }
+      const total = sizes.reduce((a, b) => a + b, 0);
+      el.textContent = `${sizes.length} size${sizes.length === 1 ? '' : 's'} · ` +
+        `${sizeLabel(sizes[0])}–${sizeLabel(sizes[sizes.length - 1])} · ` +
+        `~${total.toLocaleString()} prompt tokens per model · up to ${tok} output tokens at each size.`;
     }
 
     function setRunShape(key) {
       if (!SHAPES[key] || key === runShape) return;
       runShape = key;
       try { localStorage.setItem(SHAPE_KEY, key); } catch (e) {}
-      // A pipeline only speaks chat, so force the task type back to chat.
-      if (key === 'chain') $('#mode').value = 'chat';
+      // A pipeline and a sweep only speak chat, so force the task type back.
+      if (key === 'chain' || key === 'sweep') $('#mode').value = 'chat';
       syncModePanels();
       renderShapePicker();
       renderCapabilityPicker();

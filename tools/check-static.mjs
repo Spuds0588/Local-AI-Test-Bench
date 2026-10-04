@@ -119,6 +119,62 @@ check('primary capability is defined for every model',
   MODELS.every(m => CAPABILITY_ORDER.find(c => m.modes.includes(c))),
   MODELS.filter(m => !CAPABILITY_ORDER.find(c => m.modes.includes(c))).map(m => m.id).join(', '));
 
+// ---- 4c. SHAPES registry -----------------------------------------------------
+console.log('\nSHAPES registry');
+const shapeStart = html.indexOf('const SHAPES = {');
+const shapeEnd = html.indexOf('\n    };', shapeStart);
+const shapeSrc = html.slice(shapeStart, shapeEnd + '\n    }'.length) + ';';
+const shapeOrderStart = html.indexOf('const SHAPE_ORDER =', shapeStart);
+const shapeOrderSrc = html.slice(shapeOrderStart, html.indexOf(';', shapeOrderStart) + 1);
+let SHAPES, SHAPE_ORDER;
+try {
+  ({ SHAPES, SHAPE_ORDER } = new Function(`${shapeSrc}\n${shapeOrderSrc}\nreturn { SHAPES, SHAPE_ORDER };`)());
+  check('shape registry evaluates', true);
+} catch (e) { check('shape registry evaluates', false, e.message); SHAPES = {}; SHAPE_ORDER = []; }
+const shapeKeys = Object.keys(SHAPES);
+check('shape order matches the registry', SHAPE_ORDER.length === shapeKeys.length && SHAPE_ORDER.every(k => k in SHAPES),
+  `order=[${SHAPE_ORDER}] keys=[${shapeKeys}]`);
+check('every shape has icon/name/blurb', shapeKeys.every(k => SHAPES[k].icon && SHAPES[k].name && SHAPES[k].blurb));
+
+// The device-fit checks parse each model's download size, so every size label
+// must be machine-readable (e.g. "~1.5GB" / "14MB").
+const sizeRe = /([\d.]+)\s*(GB|MB)/i;
+const unparsedSizes = MODELS.filter(m => !sizeRe.test(m.size)).map(m => `${m.id}: ${m.size}`);
+check('every model size is parseable', unparsedSizes.length === 0, unparsedSizes.join(', '));
+
+// ---- 4d. Context sweep helper -----------------------------------------------
+// The sweep is a run shape that pads one prompt to growing context sizes. Its
+// helper block is dependency-free on purpose, so the padding logic can be
+// evaluated and tested here without a browser.
+console.log('\nContext sweep');
+const sweepBlockStart = html.indexOf('const SWEEP_FILLER =');
+const sweepBlockEnd = html.indexOf('/* SWEEP_BLOCK_END */');
+check('sweep helper block is present', sweepBlockStart > -1 && sweepBlockEnd > sweepBlockStart);
+let buildSweepPrompt, sizeLabel, SWEEP_PRESETS;
+try {
+  const sweepSrc = html.slice(sweepBlockStart, sweepBlockEnd);
+  ({ buildSweepPrompt, sizeLabel, SWEEP_PRESETS } =
+    new Function(`${sweepSrc}\nreturn { buildSweepPrompt, sizeLabel, SWEEP_PRESETS };`)());
+  check('sweep helper block evaluates', true);
+} catch (e) { check('sweep helper block evaluates', false, e.message); SWEEP_PRESETS = []; }
+check('sweep shape is registered', 'sweep' in SHAPES);
+check('sweep preset sizes ascend and are non-empty',
+  Array.isArray(SWEEP_PRESETS) && SWEEP_PRESETS.length > 0 && SWEEP_PRESETS.every((v, i, a) => v > 0 && (i === 0 || v > a[i - 1])),
+  String(SWEEP_PRESETS));
+if (typeof buildSweepPrompt === 'function' && typeof sizeLabel === 'function') {
+  const base = 'Summarise the passage above in one sentence.';
+  const small = buildSweepPrompt(base, 2048);
+  const large = buildSweepPrompt(base, 16384);
+  check('buildSweepPrompt grows with the target size', large.length > small.length, `${small.length} vs ${large.length}`);
+  check('buildSweepPrompt keeps the base prompt last', small.endsWith(base) && large.endsWith(base));
+  check('buildSweepPrompt pads to ~4 chars/token',
+    Math.abs(large.length - 16384 * 4) < 16384 * 4 * 0.08, `${large.length} vs ~${16384 * 4}`);
+  check('buildSweepPrompt is a no-op when the base already exceeds the target',
+    buildSweepPrompt(base, 1) === base);
+  check('sizeLabel formats token counts',
+    sizeLabel(2048) === '2K' && sizeLabel(32768) === '32K' && sizeLabel(512) === '512 tok');
+}
+
 // ---- 5. Hub reachability -----------------------------------------------------
 console.log('\nHugging Face repo reachability');
 if (offline) {

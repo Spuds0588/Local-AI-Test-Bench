@@ -20,6 +20,7 @@ Everything runs locally: model weights download once from Hugging Face (or are v
   - **🎯 Single model** — one model, one prompt. The quickest smoke test.
   - **⚖️ Compare models** — the same prompt across several models, side by side.
   - **🔗 Chain of steps** — an ordered pipeline whose steps may each use a **different model**, and each chooses exactly what it receives from earlier steps (see [Chain of steps](#chain-of-steps-a-pipeline)).
+  - **📈 Context sweep** — one prompt padded to growing context sizes (2K/4K/8K/16K…), so you can watch **TTFT** and **prefill** rate climb with context (see [Context sweep](#context-sweep-the-prefill-wall)).
 - **Task type** — the second axis: 💬 Chat, 🛠️ Tool Calling or 👁️ Vision. It decides how the prompt is graded and which controls appear. Models are organised by task type in both the model picker and Settings.
   - **💬 Chat / Instruction Following** — plain prompt → text output.
   - **🛠️ Tool Calling & Structured Output** — declare a JSON function schema and watch each model map a request to a structured call. Needle 2 and FunctionGemma use their native tool formats; the other models receive the schemas in the system prompt and are asked for strict JSON.
@@ -178,6 +179,28 @@ each step is. One card per step streams that step's output, and the exact prompt
 (including any attached context) is shown on the card, so injection is visible rather than implicit.
 
 
+## Context sweep (the prefill wall)
+
+The single most misleading number in local-AI benchmarking is decode speed: a model can still rattle off
+40 tok/s while the *wait before its first token* runs into minutes at long context. That is because prompt
+processing (**prefill**) happens entirely inside **TTFT** and scales with context, whereas decode barely
+moves. A one-context benchmark hides this. The **📈 Context sweep** run shape measures it directly:
+
+- Take one prompt and run it once per context size you pick — the presets are **2K / 4K / 8K / 16K / 32K**
+  (default 2K–16K), and the output cap per size defaults to a small **32 tokens** so the sweep stays quick
+  and the emphasis stays on the wait rather than long answers.
+- Each size pads the prompt with neutral filler until the whole prompt is about that many tokens, then keeps
+  your actual prompt **last**, so the model still answers it. Padding is a ~4-chars/token estimate; where the
+  engine reports a real prompt-token count, that true length is what the report shows (`Prompt ~tok`).
+- One card per model **per size** streams on its own, and a dedicated **Context Sweep** table reports, for
+  each step: target size, actual prompt ~tokens, **TTFT (s)**, **prefill ~tok/s**, **decode ~tok/s** and
+  output ~tok. The printable/PDF report includes it too.
+
+Read down a column: TTFT and prefill cost should climb with context. If decode speed is flat while TTFT
+rises, you have found the wall the article describes — and the point at which a chat UI stops feeling
+instant. Sweep settings (sizes + output cap) persist in `localStorage`.
+
+
 ## How the vision mode works
 
 Vision mode takes an image from a drag-and-drop / click-to-browse zone, decodes it to a `RawImage` in the browser, and sends it through each
@@ -251,6 +274,32 @@ Output never piles up: each iteration gets a freshly cleared output region (labe
 `──── iteration n/N ────` when there is more than one), so repeated runs and multi-iteration runs stay
 readable side by side.
 
+### Stage timings: TTFT, prefill and decode
+
+A single "tokens/sec" number hides *where the time goes*. This bench breaks each turn into the stages
+that actually decide how a model feels to use, in the spirit of write-ups like
+[the Qwen 27B-on-M4-Max benchmark](https://www.reddit.com/r/ollama/s/sHX74Q5xQe):
+
+- **TTFT — time to first token** — the wait before the first output token appears. Prompt/prefill
+  processing happens *entirely inside this window*, so as context grows TTFT is the number you feel.
+- **Prefill ~tok/s** — prompt-processing rate: prompt tokens served per second of TTFT.
+- **Decode ~tok/s** — steady-state output rate *after* the first token, which is what the familiar
+  "40 tok/s" usually means.
+- **Load (s)** — model download/initialisation time (shown in the printable report).
+
+TTFT is measured from just before generation begins (including tokenisation, prefill and any queue) to
+the first streamed token; decode rate is the remaining output rate. Engines that report their own
+split win over our estimate — Needle 2 exposes native `prefill_tps`/`decode_tps` — and Transformers.js
+and WebLLM supply a real prompt-token count, so prefill rate uses the true prompt length rather than an
+estimate. Engines that cannot stream (Chrome Built-in AI) show `–` for TTFT and prefill rather than a
+made-up number.
+
+Stage timings appear on the **live card footer**, in the **summary table** (`TTFT (s)`, `Prefill ~tok/s`,
+`Decode ~tok/s`), in the **Run History** table (`Avg TTFT (s)`, `Prefill ~tok/s`), in the **CSV export**
+(`TTFT (s)`, `Prompt ~tok/s`, `Decode ~tok/s`, `Prompt ~tok`), and in a dedicated **Stage Timings** table in
+the printable/PDF report. A **Context sweep** adds its own per-size table (see
+[Context sweep](#context-sweep-the-prefill-wall)).
+
 ### Max Tokens
 
 The **Max Tokens** control caps how long a single answer may get. It defaults to the bench maximum
@@ -260,15 +309,36 @@ want to *force* a bounded reply: to keep a slow CPU model snappy, to stop a mode
 repeats, or to fit more models in memory at once. Lowering it truncates output mid-answer.
 
 The **Run History** table records more than the prompt: iterations, average time, average ~tok/s,
-total ~tokens, pass/partial/fail counts, and the run's peak JS heap.
+average **TTFT** and **prefill** rate, total ~tokens, pass/partial/fail counts, and the run's peak JS heap.
+
+## Device requirements and the greyed-out models
+
+Every model card carries a download size, and the bench turns that into a rough memory footprint to
+advise you **before** you download and run something your machine may not carry. A sandboxed web page
+can see very little of the hardware — only logical cores (`navigator.hardwareConcurrency`), a coarse,
+privacy-capped RAM figure (`navigator.deviceMemory`, usually capped at 8) and whether WebGPU exists.
+Total RAM and GPU memory are never exposed, so **Settings → This Device** lets you self-report them:
+
+- **CPU logical cores**, **System RAM (GB)** and **GPU memory / VRAM (GB)**. Pre-fill them from what
+the browser can detect with *Fill detected values*, or enter your real specs.
+- WebGPU presence and the adapter's reported vendor/architecture are shown for reference.
+
+With those numbers entered, each model is checked against its footprint plus headroom for the KV cache
+and activations — GPU-backed models (WebLLM, and the larger vision checkpoints) against VRAM,
+everything else against system RAM. A model that likely won't fit is **greyed out** in the picker and
+Settings with a `⚠️ likely too heavy` note and a count in the step-2 summary/banner. Greying out is
+**advisory only**: the model stays selectable, downloadable and runnable, so you can always try it —
+and crash your computer if you insist. With nothing reported, nothing is greyed out.
 
 ## Metrics & fairness caveats
 
 - **Time** is wall-clock end-to-end per iteration, including model load for the first iteration.
-- **~Tokens** and **~tok/s** are estimates (character count / 4) except where the engine reports real counts; Needle 2 shows its engine-reported prefill/decode rates.
+- **~Tokens** and **~tok/s** are estimates (character count / 4) except where the engine reports real counts; Needle 2 shows its engine-reported prefill/decode rates. **Context-sweep padding** targets a size by character count too, so a sweep's *target* is approximate while its engine-reported `Prompt ~tok` is the real length.
+- **TTFT**, **prefill ~tok/s** and **decode ~tok/s** are measured per turn. TTFT is `–` for engines that cannot stream, and prefill uses a real prompt-token count where the engine provides one, an estimate otherwise. Decode excludes the first token, so it reads slightly higher than overall `~tok/s`.
 - WASM/CPU and WebGPU numbers are not directly comparable across devices — that's the point of running them side-by-side on *your* hardware.
 - Small models vary run-to-run; use Iterations > 1 and Retain History to probe consistency, and the Δ% column to measure output drift between runs.
-- **Cores** and **device RAM** come from `navigator.hardwareConcurrency` / `navigator.deviceMemory` (browser-reported, not a benchmark); **heap** comes from `performance.memory` where Chrome exposes it. They describe the tab's environment, not the model's own memory footprint.
+- **Cores** and **device RAM** come from `navigator.hardwareConcurrency` / `navigator.deviceMemory` (browser-reported, not a benchmark); **heap** comes from `performance.memory` where Chrome exposes it. They describe the tab's environment, not the model's own memory footprint. The fit checks in Settings prefer your self-reported specs over these browser figures.
+- **Model fit** is a rough size-based estimate, not a guarantee: actual memory use depends on quantisation, context length and runtime overhead, so a greyed-out model may still run and a "fits" model can still struggle.
 - Each iteration's output region is cleared before it streams, so the card always shows the current iteration rather than a growing transcript.
 
 ## Privacy
@@ -310,7 +380,9 @@ Add one entry to the `MODELS` array in `index.html`:
 registry (`chat`, `tool`, `vision`); it decides which capability sections the model appears in and
 whether it can be selected for the test you picked. `npm run check` enforces this.
 
-The adapter handles download, caching, streaming, and metrics automatically.
+The adapter handles download, caching, streaming, and metrics automatically. The `size` label must be
+machine-readable (`~400MB` / `1.5GB`) — the device-fit checks parse it to flag models that likely
+exceed the reported hardware, and `npm run check` enforces that it parses.
 
 Vision entries need two extra fields, both dictated by the repo:
 
