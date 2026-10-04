@@ -1331,6 +1331,24 @@ ${toolsJson}`;
       if (!tfLibPromise) {
         tfLibPromise = import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0/dist/transformers.min.js').then(tf => {
           tf.env.allowLocalModels = false;
+          // Run inference inside ONNX Runtime's worker. Without this, a WASM
+          // session runs on the main thread and a single long generation freezes
+          // the whole tab — no repaint, no clicks, the live metrics ticker stalls
+          // — even though the run itself is still progressing underneath.
+          try {
+            tf.env.backends.onnx.wasm.proxy = true;
+            log('Transformers.js: ONNX inference runs off the main thread (worker proxy).');
+          } catch (e) {
+            log('Transformers.js: could not enable the ONNX worker proxy — a long WASM run may freeze the UI.', 'warn');
+          }
+          // Multi-threaded WASM needs SharedArrayBuffer, i.e. cross-origin
+          // isolation. Without it ORT warns and falls back to a single thread.
+          try {
+            if (typeof self !== 'undefined' && self.crossOriginIsolated && navigator.hardwareConcurrency > 1) {
+              tf.env.backends.onnx.wasm.numThreads = Math.min(4, navigator.hardwareConcurrency);
+              log(`Transformers.js: WASM threads = ${tf.env.backends.onnx.wasm.numThreads} (cross-origin isolated).`);
+            }
+          } catch (e) {}
           return tf;
         });
       }

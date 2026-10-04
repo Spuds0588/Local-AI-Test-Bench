@@ -222,6 +222,14 @@ If a streaming model produces **no tokens for 20 s**, the bench flags it — the
 `⚠️ no tokens Ns — stalled?` and the top control bar turns amber — so a wedged model is obvious instead
 of looking like a slow one. Any token clears the warning.
 
+Transformers.js models run through an **ONNX worker** (`env.backends.onnx.wasm.proxy`), so a long
+WASM generation no longer blocks the main thread. Without it a single turn freezes the whole tab —
+no repaint, no clicks, and the live metrics ticker stalls — while the run keeps progressing underneath,
+which reads as "the app is frozen but the logs keep moving". If the worker cannot start, the bench logs
+a warning and falls back to on-main-thread inference. Multi-threaded WASM additionally needs
+cross-origin isolation (SharedArrayBuffer); this page is not cross-origin isolated, so ORT uses one
+thread unless you serve it with `Cross-Origin-Opener-Policy`/`Cross-Origin-Embedder-Policy` headers.
+
 Output never piles up: each iteration gets a freshly cleared output region (labelled
 `──── iteration n/N ────` when there is more than one), so repeated runs and multi-iteration runs stay
 readable side by side.
