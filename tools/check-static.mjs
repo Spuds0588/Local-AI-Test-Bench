@@ -103,8 +103,16 @@ check('capability order matches the registry', CAPABILITY_ORDER.length === capKe
 check('every capability has icon/name/blurb', capKeys.every(k => CAPABILITIES[k].icon && CAPABILITIES[k].name && CAPABILITIES[k].blurb));
 check('every model mode maps to a capability', MODELS.every(m => m.modes.every(x => x in CAPABILITIES)),
   [...new Set(MODELS.flatMap(m => m.modes).filter(x => !(x in CAPABILITIES)))].join(', '));
-check('every capability is used by at least one model', CAPABILITY_ORDER.every(k => MODELS.some(m => m.modes.includes(k))),
-  CAPABILITY_ORDER.filter(k => !MODELS.some(m => m.modes.includes(k))).join(', '));
+// A capability may be *derived* from another model mode via `derivedFrom`
+// (prompt chaining drives chat models rather than being a modality of its own).
+// Either way it must resolve to at least one model and point at a real key.
+const capMode = k => (CAPABILITIES[k] && CAPABILITIES[k].derivedFrom) || k;
+check('every capability resolves to at least one model',
+  CAPABILITY_ORDER.every(k => MODELS.some(m => m.modes.includes(capMode(k)))),
+  CAPABILITY_ORDER.filter(k => !MODELS.some(m => m.modes.includes(capMode(k)))).join(', '));
+check('derived capabilities reference a real capability',
+  CAPABILITY_ORDER.every(k => !CAPABILITIES[k].derivedFrom || CAPABILITIES[k].derivedFrom in CAPABILITIES),
+  CAPABILITY_ORDER.filter(k => CAPABILITIES[k].derivedFrom && !(CAPABILITIES[k].derivedFrom in CAPABILITIES)).join(', '));
 const capPanels = CAPABILITY_ORDER.map(k => CAPABILITIES[k].panel).filter(Boolean);
 check('capability panel selectors exist in markup', capPanels.every(sel => ids.has(sel.slice(1))), capPanels.join(', '));
 check('primary capability is defined for every model',

@@ -16,9 +16,10 @@ Everything runs locally: model weights download once from Hugging Face (or are v
   - **Needle 2 (Cactus Compute)** — the official 45M engine running in WebAssembly, vendored in this repo (14 MB, zero network after load).
   - **Transformers.js (ONNX)** — SmolLM2, LFM2.5, FunctionGemma, Qwen, Gemma 3 via WASM (CPU) or WebGPU.
   - **WebLLM (MLC · WebGPU)** — quantized Qwen, Gemma, and SmolLM2 for fast GPU-accelerated inference.
-- **Capability-first flow** — step 1 asks *what kind of test* you're running; that choice drives the whole run. Models are organised by **capability** (💬 Chat, 🛠️ Tool Calling, 👁️ Vision) in both the model picker and Settings, and each capability brings its own controls, validation and scoring.
+- **Capability-first flow** — step 1 asks *what kind of test* you're running; that choice drives the whole run. Models are organised by **capability** (💬 Chat, 🛠️ Tool Calling, 🔗 Prompt Chaining, 👁️ Vision) in both the model picker and Settings, and each capability brings its own controls, validation and scoring.
   - **💬 Chat / Instruction Following** — plain prompt → text output.
   - **🛠️ Tool Calling & Structured Output** — declare a JSON function schema and watch each model map a request to a structured call. Needle 2 and FunctionGemma use their native tool formats; the other models receive the schemas in the system prompt and are asked for strict JSON.
+  - **🔗 Prompt Chaining / Multi-turn** — build an ordered chain of prompts where each turn sees every earlier turn's prompt *and* output as conversation history. Run the chain across iterations to compare generations and see which steps stay stable.
   - **👁️ Vision / Image Understanding** — drop in an image (or click to browse) and pick a task (describe, detailed, objects & colors, OCR, or a custom prompt). Each vision model streams its own description. Images are processed entirely on-device.
 - **Evaluation scoring** — paste expected keywords (comma/newline separated) or an expected tool-call JSON object and every run is graded **✅ pass / ⚠️ partial / ❌ fail**, per iteration and aggregated into a leaderboard. Scores are included in the CSV export.
 - **Quantitative comparison table** — wall-clock time, output length, estimated tokens, tokens/sec, score, and diff% vs. the previous run per model.
@@ -46,6 +47,7 @@ categories the bench offers:
 |---|---|---|
 | 💬 `chat` | Free-form instruction following | — |
 | 🛠️ `tool` | Tool calling / structured JSON (incl. Needle 2 & FunctionGemma native formats) | Tools JSON schema |
+| 🔗 `chain` | Multi-turn prompt chaining (drives `chat` models) | Ordered turn list + per-turn keywords |
 | 👁️ `vision` | Image understanding | Image upload + vision task |
 
 How the capability shapes the UI:
@@ -63,7 +65,10 @@ How the capability shapes the UI:
 
 Adding a new capability (for example a dedicated agentic/Needle test type) means adding one entry
 to `CAPABILITIES` / `CAPABILITY_ORDER` and tagging models with the new key — no picker changes.
-`npm run check` verifies every mode maps to a capability and every capability is used.
+A capability that isn't a model modality of its own can instead declare `derivedFrom` (prompt
+chaining declares `derivedFrom: 'chat'`, so it drives the chat models without adding a `chain` badge
+to every one). `npm run check` verifies every mode maps to a capability, every capability resolves
+to at least one model, and any `derivedFrom` points at a real capability.
 
 ### Vision models (image understanding)
 
@@ -142,6 +147,20 @@ Tool Calling mode presents a JSON array of function schemas (a smart-home set is
 
 This is an honest comparison of each model's *native* strength (Needle and FunctionGemma are function-calling specialists) rather than forcing one protocol on everything. The mode note under the tools editor explains this.
 
+## How the prompt-chaining mode works
+
+Prompt Chaining tests the multi-step flows real apps use: turn 1 gets only its own prompt, and every
+later turn is sent with the earlier prompts *and* assistant outputs as conversation history — for
+Transformers.js and WebLLM the adapter is stateless, so the bench rebuilds the growing message array
+each turn; for Built-in Nano the persistent session carries it. Each iteration replays the whole chain
+from scratch, so running the same chain several times lets you compare how stable each step is.
+
+The step-1 panel holds an ordered turn list (add, remove, move up/down; the definition persists in
+`localStorage`). Give any turn expected keywords to turn on **per-turn** grading; a run's headline
+score is the mean of its graded turns (a run only reads *pass* when every graded turn passed), and
+the card, batch view and CSV all break the chain down turn by turn. With no per-turn keywords the
+shared expected-output box grades the chain's final turn instead.
+
 ## How the vision mode works
 
 Vision mode takes an image from a drag-and-drop / click-to-browse zone, decodes it to a `RawImage` in the browser, and sends it through each
@@ -169,7 +188,20 @@ The expected-output box on step 1 turns grading on. Its shape selects the grader
 
 Scores appear per-iteration on each model card, per-run in the summary table, and aggregated into the
 **Evaluation Scoreboard** (runs, pass/partial/fail counts, mean score) under the results. The CSV
-export gains `Score` and `Score Detail` columns.
+export gains `Score` and `Score Detail` columns. In a prompt chain, turns with their own keywords are
+graded individually and combined into one score per run (see above).
+
+### Clearing and starting over
+
+Step 3 keeps three separate controls so you are never stuck with a finished run:
+
+- **🧹 Clear Results** — wipes the live results grid, summary table, scoreboard, and print header,
+  and releases any in-flight flags, but keeps saved run history (you can click a history row to bring
+  an old batch back into the grid).
+- **🧪 New Test** — aborts anything still running, drops cached model sessions, clears the live
+  results, and returns to step 1 so the next test is defined from scratch. Saved history is kept.
+- **🗑️ Clear All** (next to the history heading) — removes the saved run history from
+  `localStorage` as well as clearing the live results and sessions.
 
 ## Metrics & fairness caveats
 
@@ -249,8 +281,8 @@ npm run test:vision  # download + run real VLMs on a generated fixture image
   model repo resolves on the Hugging Face Hub. `--offline` skips the network check.
 - **`npm test`** ([tools/test-scoring.mjs](tools/test-scoring.mjs)) — extracts the real scoring
   functions out of `index.html` and asserts on them, so the tests exercise the shipped code rather
-  than a copy. Covers keyword and tool-call grading, JSON extraction from prose/markdown, and the
-  pass/partial/fail boundaries.
+  than a copy. Covers keyword and tool-call grading, JSON extraction from prose/markdown, the
+  pass/partial/fail boundaries, and the per-turn aggregation used by prompt chaining.
 - **`npm run test:vision`** ([tools/test-vision.mjs](tools/test-vision.mjs)) — generates a fixture
   image (red rectangle, green triangle, blue square) with no binary checked in, then downloads real
   vision models through the shared request builder in [tools/lib/vision-request.mjs](tools/lib/vision-request.mjs)

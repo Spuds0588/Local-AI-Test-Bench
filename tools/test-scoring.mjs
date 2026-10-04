@@ -41,9 +41,9 @@ function extractFunction(name) {
   throw new Error(`Unbalanced braces while extracting ${name}()`);
 }
 
-const src = ['scoreKeywords', 'extractJsonObject', 'scoreToolCall'].map(extractFunction).join('\n');
-const factory = new Function(`${src}\nreturn { scoreKeywords, extractJsonObject, scoreToolCall };`);
-const { scoreKeywords, extractJsonObject, scoreToolCall } = factory();
+const src = ['scoreKeywords', 'extractJsonObject', 'scoreToolCall', 'aggregateScores'].map(extractFunction).join('\n');
+const factory = new Function(`${src}\nreturn { scoreKeywords, extractJsonObject, scoreToolCall, aggregateScores };`);
+const { scoreKeywords, extractJsonObject, scoreToolCall, aggregateScores } = factory();
 
 let passed = 0;
 let failed = 0;
@@ -81,6 +81,15 @@ eq('expected array takes first element', scoreToolCall('{"function":"set_lights"
 eq('unparseable expectation -> fail', scoreToolCall('{"function":"a"}', 'not json').tier, 'fail');
 eq('name/parameters aliases work', scoreToolCall('{"name":"set_lights","parameters":{"room":"kitchen","on":true}}', expected).tier, 'pass');
 eq('extra model args do not break a pass', scoreToolCall('{"function":"set_lights","arguments":{"room":"kitchen","on":true,"brightness":50}}', expected).tier, 'pass');
+
+console.log('\naggregateScores (prompt chaining)');
+const turn = t => ({ tier: t, score: t === 'pass' ? 1 : t === 'partial' ? 0.5 : 0 });
+eq('all turns pass -> pass', aggregateScores([turn('pass'), turn('pass')]).tier, 'pass');
+eq('a mixed chain -> partial', aggregateScores([turn('pass'), turn('fail')]).tier, 'partial');
+eq('all turns fail -> fail', aggregateScores([turn('fail')]).tier, 'fail');
+eq('mean score averages the turns', aggregateScores([turn('pass'), turn('partial')]).score, 0.75);
+eq('detail counts fully-passed turns', aggregateScores([turn('pass'), turn('partial'), turn('pass')]).detail, '2/3 turns passed');
+eq('no graded turns -> null', aggregateScores([]), null);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed ? 1 : 0);

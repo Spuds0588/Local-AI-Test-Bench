@@ -158,7 +158,7 @@
 
     /* Stacked containers — sibling blocks that were otherwise touching */
     #viewBench, #viewSettings { display: flex; flex-direction: column; gap: 1.1rem; }
-    #toolPanel, #visionPanel, #evalPanel, #scoreboardSection { display: flex; flex-direction: column; gap: 0.85rem; }
+    #toolPanel, #visionPanel, #chainPanel, #evalPanel, #scoreboardSection { display: flex; flex-direction: column; gap: 0.85rem; }
 
     /* Vision input preview */
     .vision-preview { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
@@ -179,6 +179,22 @@
     .dz-clear { position: absolute; top: 0.5rem; right: 0.5rem; z-index: 1; background: var(--surface); color: var(--muted);
       border: 1px solid var(--border); border-radius: 6px; padding: 0.2rem 0.5rem; font-size: 0.72rem; font-weight: 600; }
     .dz-clear:hover { opacity: 1; color: var(--danger); border-color: var(--danger); }
+
+    /* Prompt chaining (multi-turn) */
+    .chain-head { display: flex; align-items: flex-start; gap: 1rem; }
+    .chain-head .hint { flex: 1; }
+    .chain-head #chainAdd { flex: none; }
+    .chain-list { display: flex; flex-direction: column; gap: 0.7rem; }
+    .chain-row { border: 1px solid var(--border); border-radius: 8px; background: var(--surface2); padding: 0.7rem 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .chain-row-head { display: flex; align-items: center; gap: 0.5rem; }
+    .chain-turn-label { font-weight: 700; font-size: 0.82rem; color: var(--accent); }
+    .chain-row-head .spacer { flex: 1; }
+    .chain-move, .chain-del { background: var(--surface); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 0.1rem 0.45rem; font-size: 0.78rem; font-weight: 600; line-height: 1.4; }
+    .chain-move:hover, .chain-del:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+    .chain-del:hover { color: var(--danger); border-color: var(--danger); }
+    .chain-move[disabled] { opacity: 0.4; cursor: default; }
+    .chain-row textarea { min-height: 3.2rem; }
+    .chain-feed { color: var(--muted); font-size: 0.75rem; }
 
     /* Scoring */
     .score-pass { color: var(--success); font-weight: 600; }
@@ -322,11 +338,21 @@
           </p>
         </div>
 
-        <label>User Prompt / Request
+        <div id="chainPanel" style="display:none;">
+          <div class="chain-head">
+            <p class="hint" style="margin:0;">Define an ordered sequence of prompts. Each turn receives every earlier turn as
+              conversation history, so output from turn 1 feeds turn 2 and so on. Give a turn optional
+              expected keywords to grade it, then run the chain across iterations to compare how stable each step is.</p>
+            <button type="button" id="chainAdd" class="btn-small btn-secondary">＋ Add turn</button>
+          </div>
+          <div id="chainList" class="chain-list"></div>
+        </div>
+
+        <label id="userPromptBlock">User Prompt / Request
           <textarea id="userPrompt" rows="4" placeholder="Enter your prompt here..."></textarea>
         </label>
 
-        <div class="drop-field">
+        <div class="drop-field" id="fileDropField">
           <label class="dropzone" id="fileDrop">
             <input type="file" id="fileInput" accept=".txt,.md,.csv,.json,.html,.js,.css" hidden>
             <span class="dz-icon" aria-hidden="true">📄</span>
@@ -379,6 +405,7 @@
         <div class="toolbar">
           <span id="benchStatus" class="hint"></span>
           <span class="spacer" style="flex:1"></span>
+          <button id="clearResultsBtn" class="btn-secondary" title="Clear the current results, summary and scoreboard without deleting saved history">🧹 Clear Results</button>
           <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
         </div>
         <div id="resultsGrid"><p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p></div>
@@ -417,7 +444,7 @@
             <div class="row" style="gap: 0.5rem;">
               <button id="exportCsvBtn" class="btn-secondary btn-small">⬇️ CSV</button>
               <button id="exportPdfBtn" class="btn-secondary btn-small">🖨️ PDF</button>
-              <button id="clearHistoryBtn" class="btn-secondary btn-small btn-danger">🗑️ Clear</button>
+              <button id="clearHistoryBtn" class="btn-secondary btn-small btn-danger" title="Clear all results and saved run history">🗑️ Clear All</button>
             </div>
           </div>
 
@@ -433,6 +460,7 @@
 
         <div class="step-nav">
           <button id="s3Back" class="btn-secondary">◀ Edit Models</button>
+          <button id="newTestBtn" class="btn-secondary">🧪 New Test</button>
           <span class="spacer"></span>
           <button id="rerunBtn" class="btn-secondary">↻ Rerun Same Test</button>
         </div>
@@ -491,16 +519,31 @@
       tool:   { icon: '🛠️', name: 'Tool Calling & Structured Output',
                 blurb: 'Must emit one JSON tool call. Needle 2 and FunctionGemma use native tool formats.',
                 panel: '#toolPanel' },
+      chain:  { icon: '🔗', name: 'Prompt Chaining / Multi-turn',
+                blurb: 'A sequence of prompts where each turn sees the earlier turns. Run the chain repeatedly to compare generations and spot unreliable steps.',
+                panel: '#chainPanel', derivedFrom: 'chat' },
       vision: { icon: '👁️', name: 'Vision / Image Understanding',
                 blurb: 'Image + text in. Needs an uploaded image and a Transformers.js vision model.',
                 panel: '#visionPanel' },
     };
-    const CAPABILITY_ORDER = ['chat', 'tool', 'vision'];
+    const CAPABILITY_ORDER = ['chat', 'tool', 'chain', 'vision'];
     // The capability a model is filed under when lists are grouped (its first
     // declared mode). Every model still advertises *all* its modes as badges.
     function primaryCapability(m) {
       const modes = m.modes || ['chat', 'tool'];
       return CAPABILITY_ORDER.find(c => modes.includes(c)) || 'chat';
+    }
+    // A capability may be *derived* from another model mode when it isn't a
+    // modality of its own (prompt chaining just drives chat models). Such an
+    // entry carries `derivedFrom`, and this maps it back to the mode that
+    // decides which models apply.
+    function MODELS_MODE_KEY(key) {
+      const c = CAPABILITIES[key];
+      return c && c.derivedFrom ? c.derivedFrom : key;
+    }
+    function modelsForCapability(key) {
+      const want = MODELS_MODE_KEY(key);
+      return MODELS.filter(m => (m.modes || ['chat', 'tool']).includes(want));
     }
     function capabilityLabel(key) {
       const c = CAPABILITIES[key];
@@ -602,6 +645,10 @@ ${toolsJson}`;
     let currentBatch = -1;
     let stopped = false;
     let running = false;
+    // Bumped whenever the user starts a fresh test or clears results. A run in
+    // flight captures this value and refuses to write its results back once it
+    // has changed, so a stale test can never clobber a clean slate.
+    let runGeneration = 0;
     let currentCards = {};
     let currentBatchEntry = null;
 
@@ -686,8 +733,9 @@ ${toolsJson}`;
       return true;
     }
     function applicableToMode(m) {
-      const mode = currentMode();
-      return (m.modes || ['chat', 'tool']).includes(mode);
+      // Derived capabilities (e.g. chain) resolve to the mode that decides
+      // which models apply, so the same chat models serve both tests.
+      return (m.modes || ['chat', 'tool']).includes(MODELS_MODE_KEY(currentMode()));
     }
     function visibleModel(m) {
       return !prefs.hidden.includes(m.id);
@@ -807,7 +855,7 @@ ${toolsJson}`;
         const cap = CAPABILITIES[capKey];
         if (!cap) return;
         const isTest = capKey === mode;
-        const inCap = MODELS.filter(m => visibleModel(m) && engineAvailable(m) && (m.modes || []).includes(capKey));
+        const inCap = modelsForCapability(capKey).filter(m => visibleModel(m) && engineAvailable(m));
 
         const section = document.createElement(isTest ? 'div' : 'details');
         section.className = 'cap-section' + (isTest ? ' active' : ' inactive');
@@ -1531,8 +1579,12 @@ ${toolsJson}`;
       return list;
     }
 
-    function buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList) {
+    // `history` is an optional [{role, content}] transcript inserted between the
+    // system turn and the new user turn — that is how prompt chaining feeds each
+    // earlier turn (user prompt + assistant output) back to the model.
+    function buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList, history) {
       const mode = currentMode();
+      const hist = Array.isArray(history) ? history : [];
       if (mode === 'vision') {
         return { messages: [{ role: 'user', content: userPrompt }], tools: null };
       }
@@ -1540,11 +1592,13 @@ ${toolsJson}`;
         if (mode === 'tool') {
           return { messages: [
             { role: 'developer', content: sysPrompt || 'You are a model that can do function calling with the following functions' },
+            ...hist,
             { role: 'user', content: userPrompt },
           ], tools: toolsList };
         }
         return { messages: [
           { role: 'developer', content: sysPrompt || 'You are a helpful assistant.' },
+          ...hist,
           { role: 'user', content: userPrompt },
         ], tools: null };
       }
@@ -1553,7 +1607,7 @@ ${toolsJson}`;
       if (mode === 'tool') {
         system = (sysPrompt ? sysPrompt + '\n\n' : '') + TOOL_SYSTEM_INSTRUCTION(toolsJson);
       }
-      return { messages: [{ role: 'system', content: system }, { role: 'user', content: userPrompt }], tools };
+      return { messages: [{ role: 'system', content: system }, ...hist, { role: 'user', content: userPrompt }], tools };
     }
 
     /* ============================================================
@@ -1612,10 +1666,12 @@ ${toolsJson}`;
       const maxTokens = parseInt($('#maxTokens').value, 10) || 256;
       const retain = $('#retainHistory').checked;
       const sysPrompt = $('#sysPrompt').value.trim();
+      const mode = currentMode();
+      // Prompt chaining has its own sequential path (turns consume each other).
+      if (mode === 'chain') return runChainModel(model, card, { iterations, maxTokens, retain, sysPrompt });
       const rawPrompt = $('#userPrompt').value.trim();
       const file = contextFile || $('#fileInput').files[0];
       const fileText = file ? `\n\n--- [File: ${file.name}] ---\n${await file.text()}\n--- [End File] ---\n` : '';
-      const mode = currentMode();
       // Vision mode derives its prompt from the task picker (or a custom prompt).
       const userPrompt = mode === 'vision' ? visionPrompt() : rawPrompt + fileText;
 
@@ -1733,6 +1789,142 @@ ${toolsJson}`;
     }
 
     /* ============================================================
+     *  Prompt chaining (multi-turn) run path
+     *  Each iteration replays the whole chain from scratch: turn 1 gets only its
+     *  own prompt, and every later turn is sent with the earlier user prompts
+     *  and assistant outputs as conversation history. The run's headline output
+     *  is the final turn, so cross-run diffs compare finished chains.
+     * ============================================================ */
+    async function runChainModel(model, card, { iterations, maxTokens, retain, sysPrompt }) {
+      const chain = getChainTurns();
+      if (!chain.length) throw new Error('Add at least one chain turn prompt.');
+
+      const result = { modelId: model.id, label: model.label, engine: model.engine, params: model.params,
+                       mode: 'chain', outputs: [], durations: [], tokens: [], status: 'ok', error: null,
+                       scores: [], expectedKind: 'chain', turns: [], chain: chain.map(t => t.prompt) };
+
+      try {
+        card.setState('running', '<span class="spinner"></span> loading…');
+        let adapter;
+        if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
+        else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
+        else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
+        else throw new Error('Prompt chaining needs a chat model — pick a built-in, Transformers.js or WebGPU model.');
+
+        for (let i = 0; i < iterations; i++) {
+          if (stopped) throw new Error('stopped');
+          const history = [];
+          const iterTurns = [];
+          let lastText = '', lastTokens = 0, lastMs = 0;
+          let transcript = '';
+          const emit = s => { transcript += s; card.stream(s); };
+
+          for (let t = 0; t < chain.length; t++) {
+            if (stopped) throw new Error('stopped');
+            card.setState('running', `⚡ turn ${t + 1}/${chain.length} · iteration ${i + 1}/${iterations}`);
+            card.bar.style.width = '0%';
+            emit(`\n\n──── ${iterations > 1 ? `run ${i + 1} · ` : ''}turn ${t + 1}/${chain.length} ────\n`);
+            const prompt = chain[t].prompt;
+            const start = performance.now();
+            let text = '', tokens = 0;
+
+            if (model.engine === 'builtin') {
+              text = await adapter.session.prompt(prompt);
+              emit(text);
+              tokens = Math.round(text.length / 4);
+            } else {
+              const { messages, tools } = buildMessages(model, sysPrompt, prompt, '[]', [], history);
+              const onToken = x => { if (stopped) throw new Error('stopped'); emit(x); };
+              const r = model.engine === 'webllm'
+                ? await adapter.chat(messages, { maxTokens, onToken })
+                : await adapter.generate(messages, { tools, maxTokens, onToken });
+              text = r.text; tokens = r.tokens;
+              if (!text) emit('(empty output)');
+            }
+
+            const ms = (performance.now() - start) / 1000;
+            history.push({ role: 'user', content: prompt });
+            history.push({ role: 'assistant', content: text });
+
+            // Per-turn grading is opt-in: only when this turn declares keywords.
+            let score = null;
+            const expects = chain[t].expects;
+            if (expects) {
+              score = /^[\[{]/.test(expects) ? scoreToolCall(text, expects)
+                : scoreKeywords(text, expects.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean));
+              emit(`\n[Turn ${t + 1} score: ${score.label} — ${score.detail}]\n`);
+            }
+            iterTurns.push({ prompt, text, tokens, ms, score });
+            lastText = text; lastTokens = tokens; lastMs = ms;
+          }
+
+          result.outputs.push(lastText);
+          result.durations.push(lastMs);
+          result.tokens.push(lastTokens);
+          result.turns.push(iterTurns);
+
+          // The run scores the mean of its graded turns; with no per-turn
+          // expectations it falls back to the shared expected-output box graded
+          // on the chain's final output.
+          const graded = iterTurns.map(x => x.score).filter(Boolean);
+          let score = null;
+          if (graded.length) score = aggregateScores(graded);
+          else {
+            const expected = $('#expectedOutput').value.trim();
+            if (expected) {
+              score = /^[\[{]/.test(expected) ? scoreToolCall(lastText, expected)
+                : scoreKeywords(lastText, expected.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean));
+            }
+          }
+          if (score) result.scores.push(score);
+
+          const prev = previousOutputFor(model.id, currentBatchEntry);
+          const diff = prev !== undefined && prev !== null ? diffPercent(prev, lastText) : null;
+          const tps = lastTokens / Math.max(lastMs, 0.001);
+          card.metrics(`
+            <span class="metric">⏱️ <b>${fmt(lastMs)}s</b></span>
+            <span class="metric">chars <b>${lastText.length}</b></span>
+            <span class="metric">~tok <b>${lastTokens}</b></span>
+            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
+            <span class="metric">turns <b>${chain.length}</b></span>
+            ${diff !== null ? `<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${diff}%</b></span>` : ''}
+            ${score ? `<span class="metric">score <b class="${score.cls}">${score.label}</b> · ${escHTML(score.detail)}</span>` : ''}
+          `);
+          if (diff !== null) {
+            const badge = card.foot.querySelector('.diff-badge');
+            badge.onclick = () => {
+              if (card.body.dataset.mode === 'diff') { card.body.dataset.mode = 'text'; card.render(transcript); }
+              else { card.body.innerHTML = `<pre>${diffHTML(prev, lastText)}</pre>`; card.body.dataset.mode = 'diff'; }
+            };
+          }
+        }
+
+        card.setState('done', `✅ done · ${chain.length} turn${chain.length === 1 ? '' : 's'}${iterations > 1 ? ` × ${iterations}` : ''}`);
+        if (!retain) { try { adapter.reset(); } catch (e) {} }
+      } catch (err) {
+        result.status = err.message === 'stopped' ? 'stopped' : 'error';
+        result.error = err.message;
+        card.setState(err.message === 'stopped' ? 'warn' : 'error', err.message === 'stopped' ? '⏹ stopped' : '❌ ' + escHTML(err.message));
+        card.metrics('<span class="metric" style="color:var(--danger)">' + escHTML(err.message) + '</span>');
+        throw err;
+      }
+      return result;
+    }
+
+    /* Combine per-turn grades into one score for the run (mean score, pass only
+       when every graded turn passed). */
+    function aggregateScores(scores) {
+      if (!scores || !scores.length) return null;
+      const score = scores.reduce((a, s) => a + (s.score || 0), 0) / scores.length;
+      let tier, cls, label;
+      if (score >= 0.999) { tier = 'pass'; cls = 'score-pass'; label = '✅ pass'; }
+      else if (score > 0) { tier = 'partial'; cls = 'score-partial'; label = '⚠️ partial'; }
+      else { tier = 'fail'; cls = 'score-fail'; label = '❌ fail'; }
+      const passed = scores.filter(s => s.tier === 'pass').length;
+      return { kind: 'chain', tier, cls, label, score, detail: `${passed}/${scores.length} turns passed` };
+    }
+
+    /* ============================================================
      *  Evaluation / scoring
      *  Two graders, chosen by the shape of the expected-output box:
      *    - keywords: comma/newline-separated terms, case-insensitive
@@ -1829,6 +2021,8 @@ ${toolsJson}`;
       try {
         if (currentMode() === 'vision') {
           if (!visionImage) throw new Error('Select an image on step 1 (Vision mode).');
+        } else if (currentMode() === 'chain') {
+          if (!getChainTurns().length) throw new Error('Add at least one chain turn prompt on step 1.');
         } else if (!($('#userPrompt').value.trim())) {
           throw new Error('Enter a user prompt / request on step 1.');
         }
@@ -1846,6 +2040,7 @@ ${toolsJson}`;
 
       stopped = false;
       running = true;
+      const myGen = runGeneration;
       currentBatchEntry = { models: selected.map(m => ({ modelId: m.id })) };
       goStep(3);
       $('#runBtn').disabled = true;
@@ -1867,6 +2062,9 @@ ${toolsJson}`;
         runModel(m, currentCards[m.id]).then(res => ({ m, res })).catch(err => ({ m, res: null, err }))
       );
       const settled = await Promise.allSettled(tasks);
+      // A New Test / full clear arrived while this run was going: discard its
+      // output so it can't overwrite the fresh slate.
+      if (myGen !== runGeneration) return;
       const results = settled.map(s => s.value).filter(v => v && v.res);
 
       // Anything that ran successfully is now downloaded / ready.
@@ -1882,11 +2080,15 @@ ${toolsJson}`;
       $('#stopBtn').disabled = true;
       $('#benchStatus').textContent = '';
 
+      const chain = currentMode() === 'chain' ? getChainTurns() : null;
       const entry = {
         datetime: new Date().toLocaleString(),
         mode: currentMode(),
         sysPrompt: $('#sysPrompt').value.trim(),
-        userPrompt: $('#userPrompt').value.trim(),
+        userPrompt: currentMode() === 'chain'
+          ? (chain.length ? `${chain.length} turn(s) · ${chain[0].prompt}` : '')
+          : $('#userPrompt').value.trim(),
+        chain,
         toolsJson: currentMode() === 'tool' ? $('#toolsJson').value : '',
         expectedOutput: $('#expectedOutput').value.trim(),
         maxTokens: parseInt($('#maxTokens').value, 10) || 256,
@@ -1900,6 +2102,38 @@ ${toolsJson}`;
       renderHistory();
       renderSummary(entry);
       renderScoreboard();
+    }
+
+    /* Clear the live results view (grid, summary, scoreboard, print header)
+       without touching saved history, so a new test starts from a clean slate.
+       Also releases any stuck running/stopped flags so navigation can't wedge. */
+    function resetResults() {
+      running = false;
+      stopped = false;
+      currentCards = {};
+      currentBatchEntry = null;
+      currentBatch = -1;
+      $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p>';
+      $('#summaryTable tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr>';
+      $('#scoreboardSection').style.display = 'none';
+      $('#scoreboardBody').innerHTML = '';
+      $('#benchStatus').textContent = '';
+      $('#runBtn').disabled = false;
+      $('#stopBtn').disabled = true;
+      ['printMode', 'printSys', 'printUser', 'printTools'].forEach(id => { const el = $('#' + id); if (el) el.textContent = ''; });
+    }
+
+    /* Start over: abort anything in flight, drop cached sessions, wipe the live
+       results and return to step 1 so the next test is defined from scratch.
+       Saved run history is kept (use Clear All to remove that too). */
+    function startNewTest() {
+      if (running && !confirm('A test is still running. Stop it and start a new test?')) return;
+      runGeneration++;          // invalidate any in-flight run's results
+      running = false;
+      resetResults();
+      stopped = true;           // signal in-flight adapters to abort
+      try { resetSessions(); } catch (e) {}
+      goStep(1);
     }
 
     /* Aggregate every scored run into a per-model leaderboard. */
@@ -1978,7 +2212,8 @@ ${toolsJson}`;
 
       if (runHistory.length) {
         const e = runHistory[0];
-        $('#printMode').textContent = e.mode === 'tool' ? 'Tool Calling & Structured Output' : 'Chat / Instruction Following';
+        const cap = CAPABILITIES[e.mode];
+        $('#printMode').textContent = cap ? cap.name : e.mode;
         $('#printSys').textContent = e.sysPrompt || 'None';
         $('#printUser').textContent = e.userPrompt || 'None';
         $('#printTools').textContent = e.toolsJson || 'None';
@@ -1998,7 +2233,7 @@ ${toolsJson}`;
 
         tr.innerHTML = `
           <td>${batch.datetime}</td>
-          <td>${batch.mode === 'tool' ? '🛠️ Tool' : '💬 Chat'}</td>
+          <td>${(CAPABILITIES[batch.mode] ? CAPABILITIES[batch.mode].icon + ' ' : '') + escHTML(batch.mode)}</td>
           <td>${batch.models.length}</td>
           <td>${fmt(avgDur)}</td>
           <td>${avgDiff}</td>
@@ -2015,8 +2250,17 @@ ${toolsJson}`;
         grid.appendChild(card.el);
         const last = m.outputs.length - 1;
         if (m.status === 'ok' && m.outputs[last]) {
-          card.render(m.outputs[last]);
-          card.setState('done', `✅ ${batch.iterations > 1 ? batch.iterations + ' iterations · ' : ''}${fmt(m.durations[last] || 0)}s`);
+          if (m.turns && m.turns[last]) {
+            const turns = m.turns[last];
+            card.render(turns.map((t, ti) =>
+              `──── turn ${ti + 1}/${turns.length} ────\n${t.text}` +
+              (t.score ? `\n[Turn ${ti + 1} score: ${t.score.label} — ${t.score.detail}]` : '')
+            ).join('\n\n'));
+          } else {
+            card.render(m.outputs[last]);
+          }
+          card.setState('done', `✅ ${batch.iterations > 1 ? batch.iterations + ' iterations · ' : ''}` +
+            `${m.turns && m.turns[last] ? m.turns[last].length + ' turns · ' : ''}${fmt(m.durations[last] || 0)}s`);
           const tps = (m.tokens[last] || 0) / Math.max(m.durations[last] || 0, 0.001);
           const sc = (m.scores || [])[last];
           card.metrics(`<span class="metric">⏱️ <b>${fmt(m.durations[last] || 0)}s</b></span>
@@ -2038,15 +2282,21 @@ ${toolsJson}`;
       const esc = str => `"${(str || '').toString().replace(/"/g, '""')}"`;
       const latest = runHistory[0];
       const header = `Mode,${esc(latest.mode)}\nSystem Prompt,${esc(latest.sysPrompt)}\nUser Prompt,${esc(latest.userPrompt)}\nTools,${esc(latest.toolsJson)}\n\n`;
-      const cols = 'Date/Time,Model,Engine,Params,Iteration,Time (s),~Tokens,~tok/s,Score,Score Detail,Output\n';
+      const cols = 'Date/Time,Model,Engine,Params,Iteration,Turn,Time (s),~Tokens,~tok/s,Score,Score Detail,Output\n';
       const rows = runHistory.flatMap(batch =>
         batch.models.flatMap(m =>
           m.outputs.map((out, i) => {
-            const sc = (m.scores || [])[i];
-            return [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1,
-             (m.durations[i] || 0).toFixed(2), m.tokens[i] || 0,
-             ((m.tokens[i] || 0) / Math.max(m.durations[i] || 0, 0.001)).toFixed(1),
-             sc ? sc.tier : '', sc ? sc.detail : '', out].map(esc).join(',');
+            // Chains store one row per turn; single-prompt runs have one turn.
+            const turns = (m.turns && m.turns[i])
+              ? m.turns[i]
+              : [{ text: out, tokens: m.tokens[i] || 0, ms: m.durations[i] || 0, score: (m.scores || [])[i] }];
+            return turns.map((t, ti) => {
+              const sc = t.score || null;
+              return [batch.datetime, m.label, ENGINES[m.engine].name, m.params, i + 1, ti + 1,
+               (t.ms || 0).toFixed(2), t.tokens || 0,
+               ((t.tokens || 0) / Math.max(t.ms || 0, 0.001)).toFixed(1),
+               sc ? sc.tier : '', sc ? sc.detail : '', t.text].map(esc).join(',');
+            }).join('\n');
           })
         )
       ).join('\n');
@@ -2058,12 +2308,14 @@ ${toolsJson}`;
 
     $('#exportPdfBtn').onclick = () => { if (!runHistory.length) return alert('No data to print.'); window.print(); };
     $('#clearHistoryBtn').onclick = () => {
-      if (confirm('Clear all local history?')) {
+      if (confirm('Clear all results and saved run history?')) {
         localStorage.removeItem('slmBenchHistory');
         runHistory = []; currentBatch = -1;
+        try { resetSessions(); } catch (e) {}
         renderHistory();
         renderSummary(null);
-        $('#resultsGrid').innerHTML = '<p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p>';
+        renderScoreboard();
+        resetResults();
       }
     };
 
@@ -2083,6 +2335,13 @@ ${toolsJson}`;
         const c = CAPABILITIES[mode];
         note.textContent = c ? c.blurb : '';
       }
+      // Chaining replaces the single user prompt (and file context) with its own
+      // ordered turn list.
+      const chainMode = mode === 'chain';
+      ['#userPromptBlock', '#fileDropField'].forEach(sel => {
+        const el = $(sel);
+        if (el) el.style.display = chainMode ? 'none' : '';
+      });
     }
 
     /* Capability picker (step 1) — rendered from CAPABILITIES. */
@@ -2093,7 +2352,7 @@ ${toolsJson}`;
       host.innerHTML = '';
       CAPABILITY_ORDER.forEach(key => {
         const c = CAPABILITIES[key];
-        const models = MODELS.filter(m => (m.modes || []).includes(key) && engineAvailable(m));
+        const models = modelsForCapability(key).filter(engineAvailable);
         const ready = models.filter(modelReady).length;
         const card = document.createElement('button');
         card.type = 'button';
@@ -2166,13 +2425,101 @@ ${toolsJson}`;
       $('#fileClear').hidden = true;
       setDropName($('#fileDropName'), FILE_DEFAULT_LABEL, false);
     };
+    /* ---- Prompt chaining (multi-turn) ----
+       A chain is an ordered list of turns. Each turn is sent as a chat message
+       with every earlier turn (user prompt + assistant output) ahead of it, so
+       the model sees a real conversation rather than one isolated prompt.
+       Definitions persist locally so tweaks survive a refresh. */
+    const CHAIN_KEY = 'slmChainTurns';
+    function defaultChainTurns() {
+      return [{ prompt: '', expects: '' }, { prompt: '', expects: '' }];
+    }
+    let chainTurns;
+    try {
+      const saved = JSON.parse(localStorage.getItem(CHAIN_KEY) || 'null');
+      chainTurns = Array.isArray(saved) && saved.length
+        ? saved.map(t => ({ prompt: String(t.prompt || ''), expects: String(t.expects || '') }))
+        : defaultChainTurns();
+    } catch (e) { chainTurns = defaultChainTurns(); }
+
+    function saveChain() { try { localStorage.setItem(CHAIN_KEY, JSON.stringify(chainTurns)); } catch (e) {} }
+    // The runnable chain: turns that actually carry a prompt, trimmed.
+    function getChainTurns() {
+      return chainTurns
+        .map(t => ({ prompt: (t.prompt || '').trim(), expects: (t.expects || '').trim() }))
+        .filter(t => t.prompt);
+    }
+
+    function renderChainTurns() {
+      const host = $('#chainList');
+      if (!host) return;
+      host.innerHTML = '';
+      chainTurns.forEach((turn, i) => {
+        const row = document.createElement('div');
+        row.className = 'chain-row';
+
+        const head = document.createElement('div');
+        head.className = 'chain-row-head';
+        const label = document.createElement('span');
+        label.className = 'chain-turn-label';
+        label.textContent = `Turn ${i + 1}`;
+        head.appendChild(label);
+        const spacer = document.createElement('span');
+        spacer.className = 'spacer';
+        head.appendChild(spacer);
+        const mkBtn = (txt, cls, title, fn, disabled) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = cls; b.textContent = txt; b.title = title;
+          if (disabled) b.disabled = true; else b.onclick = fn;
+          return b;
+        };
+        const swap = (from, to) => { const t = chainTurns.splice(from, 1)[0]; chainTurns.splice(to, 0, t); saveChain(); renderChainTurns(); };
+        head.appendChild(mkBtn('↑', 'chain-move', 'Move up', () => swap(i, i - 1), i === 0));
+        head.appendChild(mkBtn('↓', 'chain-move', 'Move down', () => swap(i, i + 1), i === chainTurns.length - 1));
+        head.appendChild(mkBtn('✕', 'chain-del', 'Remove turn',
+          () => { chainTurns.splice(i, 1); if (!chainTurns.length) chainTurns.push({ prompt: '', expects: '' }); saveChain(); renderChainTurns(); },
+          chainTurns.length <= 1));
+        row.appendChild(head);
+
+        const ta = document.createElement('textarea');
+        ta.rows = 2;
+        ta.className = 'chain-prompt';
+        ta.placeholder = i === 0 ? 'Turn 1 prompt — the task or question that starts the chain…'
+          : `Turn ${i + 1} prompt — what to ask next, given the earlier turns…`;
+        ta.value = turn.prompt;
+        ta.oninput = () => { chainTurns[i].prompt = ta.value; saveChain(); };
+        row.appendChild(ta);
+
+        const feed = document.createElement('div');
+        feed.className = 'chain-feed';
+        feed.textContent = i === 0 ? 'Starts the chain.' : `Feeds on turns 1–${i} above.`;
+        row.appendChild(feed);
+
+        const exp = document.createElement('input');
+        exp.type = 'text';
+        exp.className = 'chain-expects';
+        exp.placeholder = 'Expected keywords for this turn (optional — turns on per-turn scoring)';
+        exp.value = turn.expects;
+        exp.oninput = () => { chainTurns[i].expects = exp.value; saveChain(); };
+        row.appendChild(exp);
+
+        host.appendChild(row);
+      });
+    }
+
+    $('#chainAdd').onclick = () => { chainTurns.push({ prompt: '', expects: '' }); saveChain(); renderChainTurns(); };
+    renderChainTurns();
+
     $('#visionTask').onchange = () => { if ($('#visionTask').value === 'custom') $('#userPrompt').focus(); };
     $('#showNotReady').onchange = () => { prefs.showNotReady = $('#showNotReady').checked; savePrefs(); buildModelPicker(); };
     $('#s1Next').onclick = () => {
       const errEl = $('#step1 .step-error'); if (errEl) errEl.remove();
-      if (!$('#userPrompt').value.trim()) {
+      const invalid = currentMode() === 'chain'
+        ? (!getChainTurns().length ? '⚠️ Add at least one chain turn with a prompt before continuing.' : null)
+        : (!$('#userPrompt').value.trim() ? '⚠️ Enter a user prompt / request before continuing.' : null);
+      if (invalid) {
         const d = document.createElement('div'); d.className = 'step-error';
-        d.textContent = '⚠️ Enter a user prompt / request before continuing.';
+        d.textContent = invalid;
         $('#step1 .step-nav').prepend(d);
         return;
       }
@@ -2189,6 +2536,8 @@ ${toolsJson}`;
     $('#s3Back').onclick = () => goStep(2);
     $('#runBtn').onclick = runBench;
     $('#rerunBtn').onclick = runBench;
+    $('#newTestBtn').onclick = startNewTest;
+    $('#clearResultsBtn').onclick = () => { if (running) return alert('A test is running — stop it or start a New Test first.'); resetResults(); };
     $('#stopBtn').onclick = () => {
       stopped = true;
       $('#stopBtn').disabled = true;
