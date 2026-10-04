@@ -193,15 +193,49 @@ graded individually and combined into one score per run (see above).
 
 ### Clearing and starting over
 
-Step 3 keeps three separate controls so you are never stuck with a finished run:
+The run controls live in a bar **pinned to the top of the bench**, above the wizard steps, so they are
+never hidden behind step 3 — a running, stalled or finished test is always one click from recovery:
 
-- **🧹 Clear Results** — wipes the live results grid, summary table, scoreboard, and print header,
-  and releases any in-flight flags, but keeps saved run history (you can click a history row to bring
-  an old batch back into the grid).
+- **■ Stop** — aborts the models currently running at their next token.
 - **🧪 New Test** — aborts anything still running, drops cached model sessions, clears the live
   results, and returns to step 1 so the next test is defined from scratch. Saved history is kept.
+- **🧹 Clear Results** — wipes the live results grid, summary table, scoreboard, and print header,
+  but keeps saved run history (click a history row to bring an old batch back into the grid).
+- **🧠 Free Memory** — disposes every loaded model (ONNX session / WebGPU engine) and clears the live
+  results, reclaiming the tab's memory **without** touching downloaded models or saved history. Use it
+  after a heavy session when the page starts to feel sluggish.
+- **♻️ Reset Tab** — disposes models, then reloads the tab for a completely fresh JS heap and GPU
+  memory. Downloaded models live in the browser's own caches, so they survive the reload; unsaved live
+  results do not. This is the recovery hatch if a tab ever wedges.
 - **🗑️ Clear All** (next to the history heading) — removes the saved run history from
   `localStorage` as well as clearing the live results and sessions.
+
+### Progress, telemetry and stalls
+
+Every card carries a live footer while it runs: state, elapsed time, ~tok, ~tok/s, streamed chunks,
+the browser's reported **logical cores** and **device RAM**, and the **JS heap** in use by the tab.
+The **Activity Log** in step 3 mirrors the browser console (newest first), and the browser console gets
+a full trace — run start/end, model load time, per-iteration and per-turn timing, scores, resets, and
+the reason a model stopped.
+
+If a streaming model produces **no tokens for 20 s**, the bench flags it — the card shows
+`⚠️ no tokens Ns — stalled?` and the top control bar turns amber — so a wedged model is obvious instead
+of looking like a slow one. Any token clears the warning.
+
+Output never piles up: each iteration gets a freshly cleared output region (labelled
+`──── iteration n/N ────` when there is more than one), so repeated runs and multi-iteration runs stay
+readable side by side.
+
+### Max Tokens
+
+The **Max Tokens** control caps how long a single answer may get. It defaults to the bench maximum
+(2048) on purpose: generation still stops on its own at the model's end-of-sequence token, so a high
+cap never wastes work on a finished answer — it only removes an arbitrary ceiling. Lower it when you
+want to *force* a bounded reply: to keep a slow CPU model snappy, to stop a model that rambles or
+repeats, or to fit more models in memory at once. Lowering it truncates output mid-answer.
+
+The **Run History** table records more than the prompt: iterations, average time, average ~tok/s,
+total ~tokens, pass/partial/fail counts, and the run's peak JS heap.
 
 ## Metrics & fairness caveats
 
@@ -209,6 +243,8 @@ Step 3 keeps three separate controls so you are never stuck with a finished run:
 - **~Tokens** and **~tok/s** are estimates (character count / 4) except where the engine reports real counts; Needle 2 shows its engine-reported prefill/decode rates.
 - WASM/CPU and WebGPU numbers are not directly comparable across devices — that's the point of running them side-by-side on *your* hardware.
 - Small models vary run-to-run; use Iterations > 1 and Retain History to probe consistency, and the Δ% column to measure output drift between runs.
+- **Cores** and **device RAM** come from `navigator.hardwareConcurrency` / `navigator.deviceMemory` (browser-reported, not a benchmark); **heap** comes from `performance.memory` where Chrome exposes it. They describe the tab's environment, not the model's own memory footprint.
+- Each iteration's output region is cleared before it streams, so the card always shows the current iteration rather than a growing transcript.
 
 ## Privacy
 

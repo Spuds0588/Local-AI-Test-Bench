@@ -156,6 +156,22 @@
 
     .toolbar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
 
+    /* Global run controls (top of the bench) */
+    #runControls { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+      padding: 0.55rem 0.75rem; border: 1px solid var(--border); border-radius: 8px;
+      background: rgba(24,24,37,0.96); backdrop-filter: blur(4px); }
+    #runControls.is-running { border-color: var(--accent); }
+    #runControls.is-stalled { border-color: var(--warn); }
+
+    /* Activity log */
+    #activitySection { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+    .activity-summary { cursor: pointer; padding: 0.55rem 0.9rem; font-weight: 600; font-size: 0.88rem; color: var(--text); }
+    .activity-log { max-height: 220px; overflow: auto; padding: 0.4rem 0.9rem 0.7rem; display: flex; flex-direction: column; gap: 0.15rem; }
+    .activity-row { font-family: monospace; font-size: 0.72rem; color: var(--muted); white-space: pre-wrap; word-break: break-word; border-bottom: 1px solid rgba(69,71,90,0.35); padding: 0.1rem 0; }
+    .activity-row.warn { color: var(--warn); }
+    .activity-row.err { color: var(--danger); }
+    .activity-row.ok { color: var(--success); }
+
     /* Stacked containers — sibling blocks that were otherwise touching */
     #viewBench, #viewSettings { display: flex; flex-direction: column; gap: 1.1rem; }
     #toolPanel, #visionPanel, #chainPanel, #evalPanel, #scoreboardSection { display: flex; flex-direction: column; gap: 0.85rem; }
@@ -265,6 +281,18 @@
 
     <!-- ================= BENCH VIEW ================= -->
     <div id="viewBench">
+      <!-- Global run controls — pinned to the top of the bench so a running,
+           stalled or finished test is never hidden behind a wizard step. -->
+      <div id="runControls" class="run-controls">
+        <span id="benchStatus" class="hint">Idle — configure a test to begin.</span>
+        <span class="spacer" style="flex:1"></span>
+        <button id="stopBtn" class="btn-secondary btn-small" disabled title="Abort the models currently running">■ Stop</button>
+        <button id="newTestBtn" class="btn-secondary btn-small" title="Abort anything in flight and return to step 1 to define a fresh test">🧪 New Test</button>
+        <button id="clearResultsBtn" class="btn-secondary btn-small" title="Clear the live results, summary and scoreboard without deleting saved history">🧹 Clear Results</button>
+        <button id="freeMemoryBtn" class="btn-secondary btn-small" title="Dispose every loaded model and reclaim the tab's memory. Downloaded models and saved history are kept.">🧠 Free Memory</button>
+        <button id="reloadBtn" class="btn-secondary btn-small btn-danger" title="Dispose models, then reload the tab for a completely fresh runtime. Downloaded models are kept in the browser cache.">♻️ Reset Tab</button>
+      </div>
+
       <div class="stepper" id="stepper">
         <div class="step-pill active" data-step="1"><span class="num">1</span> Configure Test</div>
         <div class="step-pill" data-step="2"><span class="num">2</span> Select Models</div>
@@ -284,7 +312,7 @@
 
         <div class="row">
           <label>Max Tokens
-            <input type="number" id="maxTokens" value="256" min="16" max="2048">
+            <input type="number" id="maxTokens" value="2048" min="16" max="2048" title="Hard cap on how many tokens a single turn may generate. Defaults to the bench maximum (2048).">
           </label>
           <label>Iterations
             <input type="number" id="iterations" value="1" min="1" max="50">
@@ -293,6 +321,12 @@
             <input type="checkbox" id="retainHistory" checked> Retain Context History
           </label>
         </div>
+        <p class="hint" style="margin:0;">
+          <b>Max Tokens</b> caps how long one answer may get, and it defaults to the bench maximum (2048) on purpose:
+          generation still stops on its own at the model's end-of-sequence token, so a high cap never wastes work on a
+          finished answer. Lower it only when you want to force a bounded reply — to keep a slow CPU model snappy, to
+          stop a model that rambles/repeats, or to fit more models in memory at once. Lowering it truncates output mid-answer.
+        </p>
 
         <label>System Prompt
           <textarea id="sysPrompt" rows="2" placeholder="e.g., Answer in markdown format."></textarea>
@@ -402,12 +436,7 @@
       <!-- Step 3 · Run & compare -->
       <section id="step3" class="step card">
         <h2>3 · Run &amp; Compare</h2>
-        <div class="toolbar">
-          <span id="benchStatus" class="hint"></span>
-          <span class="spacer" style="flex:1"></span>
-          <button id="clearResultsBtn" class="btn-secondary" title="Clear the current results, summary and scoreboard without deleting saved history">🧹 Clear Results</button>
-          <button id="stopBtn" class="btn-secondary" disabled>■ Stop</button>
-        </div>
+        <p id="runSummaryBar" class="hint" style="margin:0;">No run in progress.</p>
         <div id="resultsGrid"><p class="hint" style="margin:0;">Your models will stream their output here, side by side.</p></div>
 
         <div class="table-container">
@@ -431,6 +460,11 @@
           </div>
         </div>
 
+        <details id="activitySection" open>
+          <summary class="activity-summary">🗒️ Activity Log <span class="hint">(newest first — mirrors the browser console)</span></summary>
+          <div id="activityBody" class="activity-log"></div>
+        </details>
+
         <div id="printWrap">
           <div id="printHeader">
             <h3>Mode</h3><p id="printMode"></p>
@@ -448,10 +482,9 @@
             </div>
           </div>
 
-          <div class="table-container" style="margin-top:0.75rem;">
-            <table id="historyTable">
+          <div class="table-container" style="margin-top:0.75rem;">              <table id="historyTable">
               <thead>
-                <tr><th>Date/Time</th><th>Mode</th><th>Models</th><th>Avg Time (s)</th><th>Avg Δ%</th><th>Prompt Preview</th></tr>
+                <tr><th>Date/Time</th><th>Mode</th><th>Models</th><th>Iters</th><th>Avg Time (s)</th><th>Avg ~tok/s</th><th>Total ~tok</th><th>Pass/Part/Fail</th><th>Peak Heap</th><th>Prompt Preview</th></tr>
               </thead>
               <tbody id="historyBody"></tbody>
             </table>
@@ -460,7 +493,6 @@
 
         <div class="step-nav">
           <button id="s3Back" class="btn-secondary">◀ Edit Models</button>
-          <button id="newTestBtn" class="btn-secondary">🧪 New Test</button>
           <span class="spacer"></span>
           <button id="rerunBtn" class="btn-secondary">↻ Rerun Same Test</button>
         </div>
@@ -1255,6 +1287,8 @@ ${toolsJson}`;
 
       $('#statusMsg').textContent = 'Ready. Models run 100% locally — fetch weights once in Settings → Downloads, then test.';
       $('#status').className = 'status-ok';
+      const facts = deviceFacts();
+      log(`Bench ready — cores=${facts.cores || '?'} · deviceRAM=${facts.ramGB ? facts.ramGB + 'GB' : '?'} · JS heap=${heapMB() ? heapMB().toFixed(0) + 'MB' : 'n/a'}.`);
 
       // Recover readiness from the browser's real caches, then reflect any
       // restored in-flight/interrupted download state in the UI.
@@ -1619,6 +1653,141 @@ ${toolsJson}`;
     /* ============================================================
      *  Execution
      * ============================================================ */
+    /* ============================================================
+     *  Telemetry — console/activity logging, live card metrics, stall watch
+     *  Everything here is best-effort and read-only: it never changes a run's
+     *  result, it just makes what is happening visible while it happens.
+     * ============================================================ */
+    const STALL_MS = 20000;      // no tokens for this long → flag a possible stall
+    let runTicker = null;
+    let runPeakHeap = 0;
+
+    function heapMB() {
+      const pm = performance.memory;
+      return (pm && pm.usedJSHeapSize) ? pm.usedJSHeapSize / 1048576 : null;
+    }
+
+    function deviceFacts() {
+      return {
+        cores: (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || null,
+        ramGB: (typeof navigator !== 'undefined' && navigator.deviceMemory) || null,
+      };
+    }
+
+    // Mirror every progress line to the console AND the on-page activity log, so
+    // a run can be followed without devtools open.
+    function log(msg, cls) {
+      const stamp = new Date().toLocaleTimeString();
+      try { console.log(`[bench ${stamp}] ` + msg); } catch (e) {}
+      const body = $('#activityBody');
+      if (!body) return;
+      const row = document.createElement('div');
+      row.className = 'activity-row' + (cls ? ' ' + cls : '');
+      row.textContent = `${stamp}  ${msg}`;
+      body.prepend(row);
+      while (body.childElementCount > 300) body.lastElementChild.remove();
+    }
+
+    function toggleDiff(card, prev, text) {
+      if (card.body.dataset.mode === 'diff') { card.render(text); }
+      else { card.body.innerHTML = '<pre>' + diffHTML(prev, text) + '</pre>'; card.body.dataset.mode = 'diff'; }
+    }
+
+    // Compose the card's live footer from its telemetry: state, timing, throughput,
+    // runtime facts (cores/RAM/heap) and a stall warning when relevant.
+    function renderCardLive(card) {
+      const s = card.stat;
+      if (!s || s.phase === 'idle') return;
+      const parts = [];
+      const icon = s.error ? '❌' : (s.done ? '✅' : '⏳');
+      parts.push(`<span class="metric">${icon} <b>${escHTML(String(s.phase))}</b></span>`);
+      if (s.elapsed) parts.push(`<span class="metric">⏱️ <b>${fmt(s.elapsed)}s</b></span>`);
+      if (s.tokens) parts.push(`<span class="metric">~tok <b>${s.tokens}</b></span>`);
+      if (s.tps) parts.push(`<span class="metric">~tok/s <b>${s.tps.toFixed(1)}</b></span>`);
+      if (s.streamed) parts.push(`<span class="metric">chunks <b>${s.streamed}</b></span>`);
+      if (s.cores) parts.push(`<span class="metric" title="logical cores reported by the browser">cores <b>${s.cores}</b></span>`);
+      if (s.ramGB) parts.push(`<span class="metric" title="device memory reported by the browser">RAM <b>${s.ramGB}GB</b></span>`);
+      if (s.heap != null) parts.push(`<span class="metric" title="JS heap in use by this tab">heap <b>${s.heap.toFixed(0)}MB</b></span>`);
+      const last = s.last;
+      if (last) {
+        if (last.chars != null) parts.push(`<span class="metric">chars <b>${last.chars}</b></span>`);
+        if (last.diff != null) parts.push(`<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${last.diff}%</b></span>`);
+        if (last.confidence != null) parts.push(`<span class="metric">confidence <b>${(last.confidence * 100).toFixed(0)}%</b></span>`);
+        if (last.prefill) parts.push(`<span class="metric">prefill <b>${last.prefill.toFixed(0)}</b> tok/s</span>`);
+        if (last.decode) parts.push(`<span class="metric">decode <b>${last.decode.toFixed(0)}</b> tok/s</span>`);
+        if (last.score) parts.push(`<span class="metric">score <b class="${last.score.cls}">${last.score.label}</b></span>`);
+      }
+      if (s.stalled) parts.push(`<span class="metric" style="color:var(--warn)">⚠️ no tokens ${(s.silentMs / 1000).toFixed(0)}s — stalled?</span>`);
+      card.metrics(parts.join(''));
+      if (last && last.diff != null) {
+        const badge = card.foot.querySelector('.diff-badge');
+        // `full` restores the whole transcript for a chain; plain runs use text.
+        if (badge) badge.onclick = () => toggleDiff(card, last.prev, last.full != null ? last.full : last.text);
+      }
+    }
+
+    // A streamed token arrived: reset the stall clock for this card.
+    function noteProgress(card) {
+      const s = card.stat;
+      if (!s) return;
+      s.lastProgressAt = performance.now();
+      s.streamed = (s.streamed || 0) + 1;
+      if (s.stalled) { s.stalled = false; log(`▶ ${s.label} resumed streaming (${s.streamed} chunks so far).`, 'ok'); }
+    }
+
+    function startRunTicker() {
+      if (runTicker) return;
+      runTicker = setInterval(() => {
+        const now = performance.now();
+        const heap = heapMB();
+        if (heap != null) runPeakHeap = Math.max(runPeakHeap, heap);
+        Object.values(currentCards).forEach(card => {
+          const s = card.stat;
+          if (!s || s.phase === 'idle' || s.done) return;
+          s.elapsed = (now - s.startedAt) / 1000;
+          s.heap = heap;
+          if (s.watchStall && s.lastProgressAt) {
+            s.silentMs = now - s.lastProgressAt;
+            if (s.silentMs > STALL_MS && !s.stalled) {
+              s.stalled = true;
+              log(`⚠️ ${s.label} has produced no tokens for ${(s.silentMs / 1000).toFixed(0)}s — it may be stalled.`, 'warn');
+            }
+          }
+          renderCardLive(card);
+        });
+        updateRunSummaryBar();
+      }, 500);
+    }
+
+    function stopRunTicker() { if (runTicker) { clearInterval(runTicker); runTicker = null; } }
+
+    function updateRunSummaryBar() {
+      const bar = $('#runSummaryBar');
+      const ctl = $('#runControls');
+      if (!bar) return;
+      const stats = Object.values(currentCards).map(c => c && c.stat).filter(Boolean);
+      const active = stats.filter(s => s.phase !== 'idle');
+      if (!active.length) {
+        bar.textContent = 'No run in progress.';
+        if (ctl) ctl.className = 'run-controls';
+        return;
+      }
+      const done = active.filter(s => s.done).length;
+      const stalled = active.filter(s => s.stalled);
+      const tokens = active.reduce((a, s) => a + (s.tokens || 0), 0);
+      const elapsed = Math.max(0, ...active.map(s => s.elapsed || 0));
+      const heap = heapMB();
+      const bits = [
+        running ? `Running ${done}/${active.length} model(s)` : `Finished ${done}/${active.length} model(s)`,
+        `${fmt(elapsed)}s elapsed`,
+        `${tokens} ~tok`,
+      ];
+      if (heap != null) bits.push(`heap ${heap.toFixed(0)}MB`);
+      if (stalled.length) bits.push(`⚠️ ${stalled.length} may be stalled`);
+      bar.textContent = bits.join(' · ');
+      if (ctl) ctl.className = 'run-controls' + (running ? (stalled.length ? ' is-stalled' : ' is-running') : '');
+    }
+
     function cardUI(model) {
       const card = document.createElement('div');
       card.className = 'mcard';
@@ -1646,6 +1815,12 @@ ${toolsJson}`;
           card.className = 'mcard state-' + cls;
           this.stateEl.innerHTML = text;
         },
+        stat: {
+          phase: 'idle', label: model.label, startedAt: 0, elapsed: 0, tokens: 0, tps: 0,
+          streamed: 0, lastProgressAt: 0, silentMs: 0, stalled: false, done: false,
+          error: null, watchStall: false, heap: null, last: null,
+          cores: deviceFacts().cores, ramGB: deviceFacts().ramGB,
+        },
         setStatus(text) { this.stateEl.innerHTML = escHTML(text); },
         progress(pct, label) {
           this.bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
@@ -1658,8 +1833,19 @@ ${toolsJson}`;
         },
         render(text) {
           this.body.innerHTML = '';
+          this.body.dataset.mode = 'text';
           const pre = document.createElement('pre');
           pre.textContent = text;
+          this.body.appendChild(pre);
+        },
+        // Fresh, empty output region for one iteration. With multiple iterations
+        // each block is labelled and cleared first, so outputs never pile up in
+        // the same region across a run.
+        startIteration(label) {
+          this.body.innerHTML = '';
+          this.body.dataset.mode = 'text';
+          const pre = document.createElement('pre');
+          if (label) pre.textContent = label + '\n';
           this.body.appendChild(pre);
         },
         metrics(html) { this.foot.innerHTML = html; },
@@ -1699,8 +1885,18 @@ ${toolsJson}`;
                        outputs: [], durations: [], tokens: [], status: 'ok', error: null,
                        scores: [], expectedKind: expectedKind };
 
+      // Live telemetry for this card: state, timing, throughput, runtime facts.
+      const s = card.stat;
+      const streaming = model.engine === 'transformers' || model.engine === 'vision' || model.engine === 'webllm';
+      Object.assign(s, { phase: 'loading', startedAt: performance.now(), elapsed: 0, tokens: 0, tps: 0,
+        streamed: 0, lastProgressAt: performance.now(), silentMs: 0, stalled: false, done: false,
+        error: null, watchStall: false, last: null });
+      renderCardLive(card);
+      log(`▶ ${model.label} (${ENGINES[model.engine].name}) — loading…`);
+
       try {
         card.setState('running', '<span class="spinner"></span> loading…');
+        const loadStart = performance.now();
         let adapter;
         if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
         else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
@@ -1708,12 +1904,24 @@ ${toolsJson}`;
         else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
         else if (model.engine === 'needle') adapter = await adapterNeedle(model, card);
         else throw new Error('Unknown engine: ' + model.engine);
+        log(`✔ ${model.label} ready in ${fmt((performance.now() - loadStart) / 1000)}s` + (sessions[model.id] ? '' : ' (shared)'), 'ok');
 
         for (let i = 0; i < iterations; i++) {
           if (stopped) throw new Error('stopped');
           card.setState('running', `⚡ iteration ${i + 1}/${iterations}${retain ? ' (context retained)' : ''}`);
           card.bar.style.width = '0%';
+          // Fresh output region per iteration: output can never pile up across
+          // turns or across repeated runs.
+          card.startIteration(iterations > 1 ? `──── iteration ${i + 1}/${iterations} ────` : null);
           const start = performance.now();
+          s.phase = iterations > 1 ? `iter ${i + 1}/${iterations} · generating` : 'generating';
+          s.elapsed = 0;
+          s.heap = heapMB();
+          s.lastProgressAt = performance.now();
+          s.stalled = false;
+          s.silentMs = 0;
+          s.watchStall = streaming;
+          log(`… ${model.label} iteration ${i + 1}/${iterations} — generating (cap ${maxTokens} tok)`);
           let text = '', tokens = 0, extra = null;
 
           if (model.engine === 'needle') {
@@ -1728,19 +1936,19 @@ ${toolsJson}`;
             tokens = Math.round(text.length / 4);
           } else if (model.engine === 'transformers') {
             const { messages, tools } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
-            const r = await adapter.generate(messages, { tools, maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); } });
+            const r = await adapter.generate(messages, { tools, maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); noteProgress(card); } });
             text = r.text; tokens = r.tokens;
             if (!text) card.stream('(empty output)');
           } else if (model.engine === 'vision') {
             if (!visionImage) throw new Error('No image selected — add one on step 1 (Vision mode).');
             const r = await adapter.generate(visionImage, userPrompt, sysPrompt, {
-              maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); },
+              maxTokens, onToken: t => { if (stopped) throw new Error('stopped'); card.stream(t); noteProgress(card); },
             });
             text = r.text; tokens = r.tokens;
             if (!text) card.stream('(empty output)');
           } else if (model.engine === 'webllm') {
             const { messages } = buildMessages(model, sysPrompt, userPrompt, toolsJson, toolsList);
-            const r = await adapter.chat(messages, { maxTokens, onToken: t => card.stream(t) });
+            const r = await adapter.chat(messages, { maxTokens, onToken: t => { card.stream(t); noteProgress(card); } });
             text = r.text; tokens = r.tokens;
             if (!text) card.stream('(empty output)');
           }
@@ -1761,34 +1969,44 @@ ${toolsJson}`;
           const prev = previousOutputFor(model.id, currentBatchEntry);
           const diff = prev !== undefined && prev !== null ? diffPercent(prev, text) : null;
           const tps = tokens / Math.max(ms, 0.001);
-          card.metrics(`
-            <span class="metric">⏱️ <b>${fmt(ms)}s</b></span>
-            <span class="metric">chars <b>${text.length}</b></span>
-            <span class="metric">~tok <b>${tokens}</b></span>
-            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
-            ${diff !== null ? `<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${diff}%</b></span>` : ''}
-            ${extra && extra.confidence != null ? `<span class="metric">confidence <b>${(extra.confidence * 100).toFixed(0)}%</b></span>` : ''}
-            ${extra && extra.prefill_tps ? `<span class="metric">prefill <b>${extra.prefill_tps.toFixed(0)}</b> tok/s</span>` : ''}
-            ${extra && extra.decode_tps ? `<span class="metric">decode <b>${extra.decode_tps.toFixed(0)}</b> tok/s</span>` : ''}
-            ${score ? `<span class="metric">score <b class="${score.cls}">${score.label}</b></span>` : ''}
-          `);
-          if (diff !== null) {
-            const badge = card.foot.querySelector('.diff-badge');
-            badge.onclick = () => {
-              const showing = card.body.dataset.mode === 'diff';
-              if (showing) { card.render(text); card.body.dataset.mode = 'text'; }
-              else { card.body.innerHTML = `<pre>${diffHTML(prev, text)}</pre>`; card.body.dataset.mode = 'diff'; }
-            };
-          }
+
+          // Fold this iteration into the card's telemetry and render the footer
+          // once (the live ticker keeps it fresh while the next turn runs).
+          s.tokens = (s.tokens || 0) + tokens;
+          s.tps = tps;
+          s.heap = heapMB();
+          s.watchStall = false;
+          s.stalled = false;
+          s.last = {
+            ms, chars: text.length, tokens, diff, prev, text, score,
+            confidence: extra && extra.confidence != null ? extra.confidence : null,
+            prefill: extra && extra.prefill_tps ? extra.prefill_tps : null,
+            decode: extra && extra.decode_tps ? extra.decode_tps : null,
+          };
+          renderCardLive(card);
+          log(`✔ ${model.label} iter ${i + 1}/${iterations} — ${tokens} ~tok in ${fmt(ms)}s (${tps.toFixed(1)} tok/s)`
+            + (score ? ` · score ${score.label}` : ''), 'ok');
         }
 
-        card.setState('done', '✅ done');
+        s.phase = iterations > 1 ? `${iterations} iterations` : 'done';
+        s.done = true;
+        s.elapsed = (performance.now() - s.startedAt) / 1000;
+        s.watchStall = false;
+        s.stalled = false;
+        renderCardLive(card);
+        card.setState('done', `✅ ${iterations > 1 ? iterations + ' iterations · ' : ''}done`);
         if (!retain) { try { adapter.reset(); } catch (e) {} }
       } catch (err) {
         result.status = err.message === 'stopped' ? 'stopped' : 'error';
         result.error = err.message;
+        s.done = true;
+        s.error = err.message;
+        s.phase = err.message === 'stopped' ? 'stopped' : 'error';
+        s.elapsed = (performance.now() - s.startedAt) / 1000;
+        s.watchStall = false;
+        renderCardLive(card);
         card.setState(err.message === 'stopped' ? 'warn' : 'error', err.message === 'stopped' ? '⏹ stopped' : '❌ ' + escHTML(err.message));
-        card.metrics('<span class="metric" style="color:var(--danger)">' + escHTML(err.message) + '</span>');
+        log(`✖ ${model.label} — ${err.message}`, err.message === 'stopped' ? 'warn' : 'err');
         throw err;
       }
       return result;
@@ -1809,13 +2027,22 @@ ${toolsJson}`;
                        mode: 'chain', outputs: [], durations: [], tokens: [], status: 'ok', error: null,
                        scores: [], expectedKind: 'chain', turns: [], chain: chain.map(t => t.prompt) };
 
+      const s = card.stat;
+      Object.assign(s, { phase: 'loading', startedAt: performance.now(), elapsed: 0, tokens: 0, tps: 0,
+        streamed: 0, lastProgressAt: performance.now(), silentMs: 0, stalled: false, done: false,
+        error: null, watchStall: false, last: null });
+      renderCardLive(card);
+      log(`▶ ${model.label} (${ENGINES[model.engine].name}) — loading for prompt chain (${chain.length} turn(s))…`);
+
       try {
         card.setState('running', '<span class="spinner"></span> loading…');
+        const loadStart = performance.now();
         let adapter;
         if (model.engine === 'builtin') adapter = await adapterBuiltin(model, card);
         else if (model.engine === 'transformers') adapter = await adapterTransformers(model, card);
         else if (model.engine === 'webllm') adapter = await adapterWebLLM(model, card);
         else throw new Error('Prompt chaining needs a chat model — pick a built-in, Transformers.js or WebGPU model.');
+        log(`✔ ${model.label} ready in ${fmt((performance.now() - loadStart) / 1000)}s`, 'ok');
 
         for (let i = 0; i < iterations; i++) {
           if (stopped) throw new Error('stopped');
@@ -1823,12 +2050,22 @@ ${toolsJson}`;
           const iterTurns = [];
           let lastText = '', lastTokens = 0, lastMs = 0;
           let transcript = '';
-          const emit = s => { transcript += s; card.stream(s); };
+          // Fresh output region for this iteration: turns never pile up.
+          card.startIteration(iterations > 1 ? `──── run ${i + 1}/${iterations} ────` : null);
+          s.phase = iterations > 1 ? `run ${i + 1}/${iterations} · generating` : 'generating';
+          s.elapsed = 0;
+          s.lastProgressAt = performance.now();
+          s.stalled = false;
+          s.silentMs = 0;
+          s.watchStall = true;
+          const iterStart = performance.now();
+          const emit = x => { transcript += x; card.stream(x); noteProgress(card); };
 
           for (let t = 0; t < chain.length; t++) {
             if (stopped) throw new Error('stopped');
             card.setState('running', `⚡ turn ${t + 1}/${chain.length} · iteration ${i + 1}/${iterations}`);
             card.bar.style.width = '0%';
+            log(`… ${model.label} run ${i + 1}/${iterations} turn ${t + 1}/${chain.length} — generating`);
             emit(`\n\n──── ${iterations > 1 ? `run ${i + 1} · ` : ''}turn ${t + 1}/${chain.length} ────\n`);
             const prompt = chain[t].prompt;
             const start = performance.now();
@@ -1862,6 +2099,7 @@ ${toolsJson}`;
             }
             iterTurns.push({ prompt, text, tokens, ms, score });
             lastText = text; lastTokens = tokens; lastMs = ms;
+            log(`✔ ${model.label} turn ${t + 1}/${chain.length} — ${tokens} ~tok in ${fmt(ms)}s` + (score ? ` · score ${score.label}` : ''), 'ok');
           }
 
           result.outputs.push(lastText);
@@ -1887,31 +2125,36 @@ ${toolsJson}`;
           const prev = previousOutputFor(model.id, currentBatchEntry);
           const diff = prev !== undefined && prev !== null ? diffPercent(prev, lastText) : null;
           const tps = lastTokens / Math.max(lastMs, 0.001);
-          card.metrics(`
-            <span class="metric">⏱️ <b>${fmt(lastMs)}s</b></span>
-            <span class="metric">chars <b>${lastText.length}</b></span>
-            <span class="metric">~tok <b>${lastTokens}</b></span>
-            <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
-            <span class="metric">turns <b>${chain.length}</b></span>
-            ${diff !== null ? `<span class="metric">Δ <b class="diff-badge" title="click to toggle diff">${diff}%</b></span>` : ''}
-            ${score ? `<span class="metric">score <b class="${score.cls}">${score.label}</b> · ${escHTML(score.detail)}</span>` : ''}
-          `);
-          if (diff !== null) {
-            const badge = card.foot.querySelector('.diff-badge');
-            badge.onclick = () => {
-              if (card.body.dataset.mode === 'diff') { card.body.dataset.mode = 'text'; card.render(transcript); }
-              else { card.body.innerHTML = `<pre>${diffHTML(prev, lastText)}</pre>`; card.body.dataset.mode = 'diff'; }
-            };
-          }
+          s.tokens = (s.tokens || 0) + iterTurns.reduce((a, x) => a + (x.tokens || 0), 0);
+          s.tps = tps;
+          s.heap = heapMB();
+          s.watchStall = false;
+          s.stalled = false;
+          s.last = { ms: lastMs, chars: lastText.length, tokens: lastTokens, diff, prev, text: lastText, full: transcript, score, turns: chain.length };
+          renderCardLive(card);
+          log(`✔ ${model.label} run ${i + 1}/${iterations} — ${chain.length} turn(s) in ${fmt((performance.now() - iterStart) / 1000)}s`
+            + (score ? ` · score ${score.label}` : ''), 'ok');
         }
 
+        s.phase = 'done';
+        s.done = true;
+        s.elapsed = (performance.now() - s.startedAt) / 1000;
+        s.watchStall = false;
+        s.stalled = false;
+        renderCardLive(card);
         card.setState('done', `✅ done · ${chain.length} turn${chain.length === 1 ? '' : 's'}${iterations > 1 ? ` × ${iterations}` : ''}`);
         if (!retain) { try { adapter.reset(); } catch (e) {} }
       } catch (err) {
         result.status = err.message === 'stopped' ? 'stopped' : 'error';
         result.error = err.message;
+        s.done = true;
+        s.error = err.message;
+        s.phase = err.message === 'stopped' ? 'stopped' : 'error';
+        s.elapsed = (performance.now() - s.startedAt) / 1000;
+        s.watchStall = false;
+        renderCardLive(card);
         card.setState(err.message === 'stopped' ? 'warn' : 'error', err.message === 'stopped' ? '⏹ stopped' : '❌ ' + escHTML(err.message));
-        card.metrics('<span class="metric" style="color:var(--danger)">' + escHTML(err.message) + '</span>');
+        log(`✖ ${model.label} — ${err.message}`, err.message === 'stopped' ? 'warn' : 'err');
         throw err;
       }
       return result;
@@ -2046,12 +2289,17 @@ ${toolsJson}`;
 
       stopped = false;
       running = true;
+      runPeakHeap = 0;
       const myGen = runGeneration;
       currentBatchEntry = { models: selected.map(m => ({ modelId: m.id })) };
       goStep(3);
       $('#runBtn').disabled = true;
       $('#stopBtn').disabled = false;
       $('#benchStatus').textContent = 'Running ' + selected.length + ' model(s) side-by-side…';
+      const dev = deviceFacts();
+      log(`═ RUN START ═ mode=${currentMode()} · models=${selected.map(m => m.label).join(', ')} · ` +
+          `iterations=${$('#iterations').value} · maxTokens=${$('#maxTokens').value} · retain=${$('#retainHistory').checked} · ` +
+          `cores=${dev.cores || '?'} · deviceRAM=${dev.ramGB ? dev.ramGB + 'GB' : '?'}`);
 
       const grid = $('#resultsGrid');
       grid.innerHTML = '';
@@ -2059,10 +2307,14 @@ ${toolsJson}`;
       selected.forEach(m => {
         const card = cardUI(m);
         grid.appendChild(card.el);
+        card.stat.phase = 'queued';
+        card.stat.startedAt = performance.now();
+        renderCardLive(card);
         currentCards[m.id] = card;
       });
+      startRunTicker();
 
-      if (!$('#retainHistory').checked) resetSessions();
+      if (!$('#retainHistory').checked) { log('Retain Context is off — dropping cached sessions before the run.'); resetSessions(); }
 
       const tasks = selected.map(m =>
         runModel(m, currentCards[m.id]).then(res => ({ m, res })).catch(err => ({ m, res: null, err }))
@@ -2084,9 +2336,28 @@ ${toolsJson}`;
       running = false;
       currentBatchEntry = null;
       $('#stopBtn').disabled = true;
-      $('#benchStatus').textContent = '';
+      stopRunTicker();
+      // The ticker samples the heap while a run is live; a very fast run may
+      // never tick, so fold in a final sample too.
+      { const h = heapMB(); if (h != null) runPeakHeap = Math.max(runPeakHeap, h); }
 
       const chain = currentMode() === 'chain' ? getChainTurns() : null;
+      const iterations = parseInt($('#iterations').value, 10) || 1;
+      // Roll this run's telemetry into a compact summary for the history table.
+      const okModels = results.filter(r => r.res.status === 'ok');
+      const totalTokens = okModels.reduce((a, r) => a + r.res.tokens.reduce((b, t) => b + (t || 0), 0), 0);
+      const totalTime = okModels.reduce((a, r) => a + r.res.durations.reduce((b, d) => b + (d || 0), 0), 0);
+      let pass = 0, partial = 0, fail = 0;
+      okModels.forEach(r => (r.res.scores || []).forEach(x => {
+        if (x.tier === 'pass') pass++; else if (x.tier === 'partial') partial++; else fail++;
+      }));
+      const stats = {
+        iterations, totalTokens, avgTps: totalTime > 0 ? totalTokens / totalTime : 0,
+        pass, partial, fail, scored: pass + partial + fail,
+        peakHeapMB: runPeakHeap || null,
+        cores: dev.cores, ramGB: dev.ramGB,
+      };
+
       const entry = {
         datetime: new Date().toLocaleString(),
         mode: currentMode(),
@@ -2098,8 +2369,9 @@ ${toolsJson}`;
         toolsJson: currentMode() === 'tool' ? $('#toolsJson').value : '',
         expectedOutput: $('#expectedOutput').value.trim(),
         maxTokens: parseInt($('#maxTokens').value, 10) || 256,
-        iterations: parseInt($('#iterations').value, 10) || 1,
+        iterations,
         retainHistory: $('#retainHistory').checked,
+        stats,
         models: results.map(r => r.res),
       };
       runHistory.unshift(entry);
@@ -2108,6 +2380,12 @@ ${toolsJson}`;
       renderHistory();
       renderSummary(entry);
       renderScoreboard();
+      updateRunSummaryBar();
+      $('#benchStatus').textContent = `Finished ${okModels.length}/${selected.length} model(s) — ${pass}✓ ${partial}~ ${fail}✗`;
+      log(`═ RUN COMPLETE ═ ${okModels.length}/${selected.length} ok · ${totalTokens} ~tok · ` +
+          `${stats.avgTps.toFixed(1)} tok/s avg · ${pass}✓/${partial}~/${fail}✗ · ` +
+          `peak heap ${runPeakHeap ? runPeakHeap.toFixed(0) + 'MB' : 'n/a'}`,
+          okModels.length === selected.length ? 'ok' : 'warn');
     }
 
     /* Clear the live results view (grid, summary, scoreboard, print header)
@@ -2116,6 +2394,7 @@ ${toolsJson}`;
     function resetResults() {
       running = false;
       stopped = false;
+      stopRunTicker();
       currentCards = {};
       currentBatchEntry = null;
       currentBatch = -1;
@@ -2123,10 +2402,11 @@ ${toolsJson}`;
       $('#summaryTable tbody').innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--muted);">No run yet.</td></tr>';
       $('#scoreboardSection').style.display = 'none';
       $('#scoreboardBody').innerHTML = '';
-      $('#benchStatus').textContent = '';
       $('#runBtn').disabled = false;
       $('#stopBtn').disabled = true;
       ['printMode', 'printSys', 'printUser', 'printTools'].forEach(id => { const el = $('#' + id); if (el) el.textContent = ''; });
+      updateRunSummaryBar();
+      $('#benchStatus').textContent = 'Idle — configure a test to begin.';
     }
 
     /* Start over: abort anything in flight, drop cached sessions, wipe the live
@@ -2135,11 +2415,44 @@ ${toolsJson}`;
     function startNewTest() {
       if (running && !confirm('A test is still running. Stop it and start a new test?')) return;
       runGeneration++;          // invalidate any in-flight run's results
-      running = false;
       resetResults();
       stopped = true;           // signal in-flight adapters to abort
       try { resetSessions(); } catch (e) {}
+      log('🧪 New test — sessions dropped, live results cleared, back to step 1. Saved history kept.');
+      // NB: stopRunTicker() already ran in resetResults(); `stopped` is only left
+      // true so any in-flight adapter bails at its next token.
       goStep(1);
+    }
+
+    /* Free the tab's runtime memory without touching saved history or the
+       downloaded-model ledger. Disposes every loaded model (ONNX / WebGPU) and
+       clears the live results, so a tab that has slowed down can be reclaimed
+       without losing which models are installed. */
+    function freeMemory() {
+      const count = Object.keys(sessions).length;
+      runGeneration++;              // invalidate any in-flight run
+      stopped = true;               // tell in-flight adapters to bail
+      resetResults();
+      try { resetSessions(); } catch (e) {}
+      stopped = false;
+      log(`🧠 Freed tab memory — disposed ${count} loaded model session(s). ` +
+          `Downloaded models and saved history are untouched.`, 'ok');
+      $('#benchStatus').textContent = count
+        ? `Freed ${count} model session(s). Downloaded models kept.`
+        : 'Nothing was loaded — memory already free.';
+    }
+
+    /* Hard reset: dispose models, then reload the tab. The browser's model
+       caches are persistent, so installed models survive while the JS heap and
+       GPU memory are fully reclaimed — the recovery hatch when a tab wedges. */
+    function resetTab() {
+      if (!confirm('Reload the tab to fully reset its memory? Downloaded models are kept; unsaved live results are lost.')) return;
+      const count = Object.keys(sessions).length;
+      stopped = true;
+      runGeneration++;
+      try { resetSessions(); } catch (e) {}
+      log(`♻️ Reloading tab — disposed ${count} session(s). Downloaded models stay cached.`);
+      setTimeout(() => location.reload(), 250);
     }
 
     /* Aggregate every scored run into a per-model leaderboard. */
@@ -2214,7 +2527,7 @@ ${toolsJson}`;
 
     function renderHistory() {
       const tbody = $('#historyBody');
-      tbody.innerHTML = runHistory.length ? '' : '<tr><td colspan="6" style="text-align:center;">No runs recorded yet.</td></tr>';
+      tbody.innerHTML = runHistory.length ? '' : '<tr><td colspan="10" style="text-align:center;">No runs recorded yet.</td></tr>';
 
       if (runHistory.length) {
         const e = runHistory[0];
@@ -2228,21 +2541,40 @@ ${toolsJson}`;
       runHistory.forEach((batch, i) => {
         const tr = document.createElement('tr');
         tr.className = i === currentBatch ? 'active-row' : '';
-        tr.onclick = () => { currentBatch = i; renderHistory(); renderBatchGrid(batch); };
+        tr.onclick = () => {
+          currentBatch = i;
+          renderHistory();
+          renderBatchGrid(batch);
+          log(`Loaded saved run from ${batch.datetime} into the grid (${batch.models.length} model(s)).`);
+        };
 
         const avgDur = batch.models.length ? (batch.models.reduce((a, m) => a + (m.durations[m.durations.length - 1] || 0), 0) / batch.models.length) : 0;
-        const diffs = batch.models.map(m => {
-          const prev = previousOutputFor(m.modelId, batch);
-          return (prev !== undefined && prev !== null && m.outputs.length) ? diffPercent(prev, m.outputs[m.outputs.length - 1]) : null;
-        }).filter(d => d !== null);
-        const avgDiff = diffs.length ? (diffs.reduce((a, b) => a + b, 0) / diffs.length).toFixed(0) : '-';
+
+        // Newer batches carry a precomputed telemetry summary; older saved ones
+        // are derived on the fly so the table never blanks out.
+        const st = batch.stats || {};
+        const iterations = st.iterations || batch.iterations || 1;
+        const totalTokens = st.totalTokens != null
+          ? st.totalTokens
+          : batch.models.reduce((a, m) => a + (m.tokens || []).reduce((b, t) => b + (t || 0), 0), 0);
+        const avgTps = st.avgTps != null ? st.avgTps : 0;
+        const scored = (st.pass || 0) + (st.partial || 0) + (st.fail || 0);
+        const ppf = scored ? `${st.pass}✓ ${st.partial}~ ${st.fail}✗` : '<span class="hint">–</span>';
+        const devTitle = [st.cores ? `${st.cores} cores` : null, st.ramGB ? `${st.ramGB}GB device RAM` : null].filter(Boolean).join(' · ');
+        const heap = st.peakHeapMB
+          ? `<span title="${escHTML(devTitle || 'peak JS heap during the run')}">${st.peakHeapMB.toFixed(0)} MB</span>`
+          : '<span class="hint">–</span>';
 
         tr.innerHTML = `
-          <td>${batch.datetime}</td>
+          <td>${escHTML(batch.datetime || '')}</td>
           <td>${(CAPABILITIES[batch.mode] ? CAPABILITIES[batch.mode].icon + ' ' : '') + escHTML(batch.mode)}</td>
           <td>${batch.models.length}</td>
+          <td>${iterations}</td>
           <td>${fmt(avgDur)}</td>
-          <td>${avgDiff}</td>
+          <td>${avgTps ? avgTps.toFixed(1) : '<span class="hint">–</span>'}</td>
+          <td>${totalTokens}</td>
+          <td>${ppf}</td>
+          <td>${heap}</td>
           <td class="cell-trim" title="${escHTML(batch.userPrompt)}">${escHTML(batch.userPrompt)}</td>`;
         tbody.appendChild(tr);
       });
@@ -2269,9 +2601,14 @@ ${toolsJson}`;
             `${m.turns && m.turns[last] ? m.turns[last].length + ' turns · ' : ''}${fmt(m.durations[last] || 0)}s`);
           const tps = (m.tokens[last] || 0) / Math.max(m.durations[last] || 0, 0.001);
           const sc = (m.scores || [])[last];
+          const bs = batch.stats || {};
           card.metrics(`<span class="metric">⏱️ <b>${fmt(m.durations[last] || 0)}s</b></span>
             <span class="metric">chars <b>${(m.outputs[last] || '').length}</b></span>
+            <span class="metric">~tok <b>${m.tokens[last] || 0}</b></span>
             <span class="metric">~tok/s <b>${tps.toFixed(1)}</b></span>
+            ${bs.cores ? `<span class="metric" title="logical cores reported by the browser">cores <b>${bs.cores}</b></span>` : ''}
+            ${bs.ramGB ? `<span class="metric" title="device memory reported by the browser">RAM <b>${bs.ramGB}GB</b></span>` : ''}
+            ${bs.peakHeapMB ? `<span class="metric" title="peak JS heap during the run">peak heap <b>${bs.peakHeapMB.toFixed(0)}MB</b></span>` : ''}
             ${sc ? `<span class="metric">score <b class="${sc.cls}">${sc.label}</b></span>` : ''}`);
         } else {
           card.setState('error', '❌ ' + escHTML(m.error || m.status));
@@ -2315,6 +2652,7 @@ ${toolsJson}`;
     $('#exportPdfBtn').onclick = () => { if (!runHistory.length) return alert('No data to print.'); window.print(); };
     $('#clearHistoryBtn').onclick = () => {
       if (confirm('Clear all results and saved run history?')) {
+        const n = runHistory.length;
         localStorage.removeItem('slmBenchHistory');
         runHistory = []; currentBatch = -1;
         try { resetSessions(); } catch (e) {}
@@ -2322,6 +2660,7 @@ ${toolsJson}`;
         renderSummary(null);
         renderScoreboard();
         resetResults();
+        log(`🗑️ Cleared ${n} saved run(s) from history, plus live results and sessions.`);
       }
     };
 
@@ -2543,11 +2882,18 @@ ${toolsJson}`;
     $('#runBtn').onclick = runBench;
     $('#rerunBtn').onclick = runBench;
     $('#newTestBtn').onclick = startNewTest;
-    $('#clearResultsBtn').onclick = () => { if (running) return alert('A test is running — stop it or start a New Test first.'); resetResults(); };
+    $('#clearResultsBtn').onclick = () => {
+      if (running) return alert('A test is running — stop it or start a New Test first.');
+      resetResults();
+      log('🧹 Clear Results — live grid, summary and scoreboard reset. Saved history kept.');
+    };
+    $('#freeMemoryBtn').onclick = freeMemory;
+    $('#reloadBtn').onclick = resetTab;
     $('#stopBtn').onclick = () => {
       stopped = true;
       $('#stopBtn').disabled = true;
       $('#benchStatus').textContent = 'Stopping…';
+      log('■ Stop requested — models will abort at the next token.', 'warn');
     };
     $('#tabBench').onclick = () => showView('bench');
     $('#tabSettings').onclick = () => showView('settings');
