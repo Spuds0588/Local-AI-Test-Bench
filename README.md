@@ -16,10 +16,13 @@ Everything runs locally: model weights download once from Hugging Face (or are v
   - **Needle 2 (Cactus Compute)** — the official 45M engine running in WebAssembly, vendored in this repo (14 MB, zero network after load).
   - **Transformers.js (ONNX)** — SmolLM2, LFM2.5, FunctionGemma, Qwen, Gemma 3 via WASM (CPU) or WebGPU.
   - **WebLLM (MLC · WebGPU)** — quantized Qwen, Gemma, and SmolLM2 for fast GPU-accelerated inference.
-- **Capability-first flow** — step 1 asks *what kind of test* you're running; that choice drives the whole run. Models are organised by **capability** (💬 Chat, 🛠️ Tool Calling, 🔗 Prompt Chaining, 👁️ Vision) in both the model picker and Settings, and each capability brings its own controls, validation and scoring.
+- **Run shapes** — step 1 asks *what* you're testing first, because that decides the whole flow:
+  - **🎯 Single model** — one model, one prompt. The quickest smoke test.
+  - **⚖️ Compare models** — the same prompt across several models, side by side.
+  - **🔗 Chain of steps** — an ordered pipeline whose steps may each use a **different model**, and each chooses exactly what it receives from earlier steps (see [Chain of steps](#chain-of-steps-a-pipeline)).
+- **Task type** — the second axis: 💬 Chat, 🛠️ Tool Calling or 👁️ Vision. It decides how the prompt is graded and which controls appear. Models are organised by task type in both the model picker and Settings.
   - **💬 Chat / Instruction Following** — plain prompt → text output.
   - **🛠️ Tool Calling & Structured Output** — declare a JSON function schema and watch each model map a request to a structured call. Needle 2 and FunctionGemma use their native tool formats; the other models receive the schemas in the system prompt and are asked for strict JSON.
-  - **🔗 Prompt Chaining / Multi-turn** — build an ordered chain of prompts where each turn sees every earlier turn's prompt *and* output as conversation history. Run the chain across iterations to compare generations and see which steps stay stable.
   - **👁️ Vision / Image Understanding** — drop in an image (or click to browse) and pick a task (describe, detailed, objects & colors, OCR, or a custom prompt). Each vision model streams its own description. Images are processed entirely on-device.
 - **Evaluation scoring** — paste expected keywords (comma/newline separated) or an expected tool-call JSON object and every run is graded **✅ pass / ⚠️ partial / ❌ fail**, per iteration and aggregated into a leaderboard. Scores are included in the CSV export.
 - **Quantitative comparison table** — wall-clock time, output length, estimated tokens, tokens/sec, score, and diff% vs. the previous run per model.
@@ -41,18 +44,17 @@ Everything runs locally: model weights download once from Hugging Face (or are v
 
 A model declares the capabilities it supports in its `modes` array (`['chat']`, `['tool']`,
 `['chat','tool']`, `['vision']`, …). The `CAPABILITIES` registry turns those keys into the test
-categories the bench offers:
+task types the bench offers:
 
-| Capability | What it tests | Extra controls |
+| Task type | What it tests | Extra controls |
 |---|---|---|
 | 💬 `chat` | Free-form instruction following | — |
 | 🛠️ `tool` | Tool calling / structured JSON (incl. Needle 2 & FunctionGemma native formats) | Tools JSON schema |
-| 🔗 `chain` | Multi-turn prompt chaining (drives `chat` models) | Ordered turn list + per-turn keywords |
 | 👁️ `vision` | Image understanding | Image upload + vision task |
 
-How the capability shapes the UI:
+How the task type shapes the UI:
 
-- **Step 1** renders the capabilities as cards — pick the one under test.
+- **Step 1** renders the run shapes as cards, then the task types as cards — pick both.
 - **Step 2** groups models **by capability** (the one under test first and selectable; the others
   are collapsed, read-only previews with a one-click *Test this instead* switch). Within a
   capability models are still sub-grouped by engine for the colour coding. Checkboxes for models
@@ -63,12 +65,12 @@ How the capability shapes the UI:
 - **Run validation and scoring** follow the capability: vision requires an uploaded image, tool
   calling validates the tools JSON and grades the emitted call, chat grades keywords.
 
-Adding a new capability (for example a dedicated agentic/Needle test type) means adding one entry
+Adding a new task type (for example a dedicated agentic/Needle test type) means adding one entry
 to `CAPABILITIES` / `CAPABILITY_ORDER` and tagging models with the new key — no picker changes.
-A capability that isn't a model modality of its own can instead declare `derivedFrom` (prompt
-chaining declares `derivedFrom: 'chat'`, so it drives the chat models without adding a `chain` badge
-to every one). `npm run check` verifies every mode maps to a capability, every capability resolves
-to at least one model, and any `derivedFrom` points at a real capability.
+A task type that isn't a model modality of its own can instead declare `derivedFrom` to drive an
+existing mode. A new *run shape* is one entry in `SHAPES` / `SHAPE_ORDER`. `npm run check` verifies
+every model mode maps to a capability, every capability resolves to at least one model, and any
+`derivedFrom` points at a real capability.
 
 ### Vision models (image understanding)
 
@@ -147,19 +149,34 @@ Tool Calling mode presents a JSON array of function schemas (a smart-home set is
 
 This is an honest comparison of each model's *native* strength (Needle and FunctionGemma are function-calling specialists) rather than forcing one protocol on everything. The mode note under the tools editor explains this.
 
-## How the prompt-chaining mode works
+## Chain of steps (a pipeline)
 
-Prompt Chaining tests the multi-step flows real apps use: turn 1 gets only its own prompt, and every
-later turn is sent with the earlier prompts *and* assistant outputs as conversation history — for
-Transformers.js and WebLLM the adapter is stateless, so the bench rebuilds the growing message array
-each turn; for Built-in Nano the persistent session carries it. Each iteration replays the whole chain
-from scratch, so running the same chain several times lets you compare how stable each step is.
+A chain is a pipeline for the multi-step flows real apps use. Each **step** names the model that runs
+it and how much earlier work it receives, so you can hand off **from one model to another** or run the
+same model repeatedly:
 
-The step-1 panel holds an ordered turn list (add, remove, move up/down; the definition persists in
-`localStorage`). Give any turn expected keywords to turn on **per-turn** grading; a run's headline
-score is the mean of its graded turns (a run only reads *pass* when every graded turn passed), and
-the card, batch view and CSV all break the chain down turn by turn. With no per-turn keywords the
-shared expected-output box grades the chain's final turn instead.
+- **Model** — any chat model, chosen per step. Step 1 can be FunctionGemma, step 2 Qwen, step 3
+  FunctionGemma again.
+- **Context rule** — what the step is fed from earlier steps:
+  - `No earlier context` — sees only its own prompt.
+  - `Previous step only` — receives the step directly above it.
+  - `Every earlier step` — receives all steps above it.
+  Under a rule, earlier output is attached as labelled blocks
+  (`[Context from step 2 — Qwen3 0.6B] … [End context]`).
+- **Placeholders** — `{{prev}}` or `{{step2}}` (also `{{2}}`) drop a prior answer *exactly where you
+  want it* in the prompt. Placeholders are independent of the context rule, so a step can keep the
+  rule at `No earlier context` and still pull one specific earlier result into position.
+
+The step-1 panel holds the ordered step list (add, remove, move up/down, pick model + context rule;
+the definition persists in `localStorage`). Each step shows a line describing what it will receive,
+and warns if a placeholder points at a step that does not run before it. Give a step expected keywords
+to turn on **per-step** grading; the card, summary table, batch view and CSV all break the run down
+step by step. With no per-step keywords, the shared expected-output box grades the final step.
+
+Each iteration replays the whole pipeline from scratch, so running it several times shows how stable
+each step is. One card per step streams that step's output, and the exact prompt a step received
+(including any attached context) is shown on the card, so injection is visible rather than implicit.
+
 
 ## How the vision mode works
 
@@ -326,7 +343,8 @@ npm run test:vision  # download + run real VLMs on a generated fixture image
 - **`npm test`** ([tools/test-scoring.mjs](tools/test-scoring.mjs)) — extracts the real scoring
   functions out of `index.html` and asserts on them, so the tests exercise the shipped code rather
   than a copy. Covers keyword and tool-call grading, JSON extraction from prose/markdown, the
-  pass/partial/fail boundaries, and the per-turn aggregation used by prompt chaining.
+  pass/partial/fail boundaries, and the `aggregateScores` helper (mean of several grades, used when a
+  run reports more than one score).
 - **`npm run test:vision`** ([tools/test-vision.mjs](tools/test-vision.mjs)) — generates a fixture
   image (red rectangle, green triangle, blue square) with no binary checked in, then downloads real
   vision models through the shared request builder in [tools/lib/vision-request.mjs](tools/lib/vision-request.mjs)
