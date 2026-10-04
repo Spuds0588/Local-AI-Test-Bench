@@ -1365,8 +1365,10 @@ ${toolsJson}`;
           const text = streamed || (typeof out === 'string' ? out : '');
           return { text, tokens: genTokens || Math.round(text.length / 4) };
         },
-        reset() { delete sessions[model.id]; },
-        destroy() {},
+        // Release the ONNX runtime model/tokenizer, not just the registry
+        // reference — otherwise every non-retained run leaks model memory.
+        reset() { try { lm.dispose && lm.dispose(); } catch (e) {} try { tokenizer.dispose && tokenizer.dispose(); } catch (e) {} delete sessions[model.id]; },
+        destroy() { try { lm.dispose && lm.dispose(); } catch (e) {} },
       };
       return s;
     }
@@ -1404,7 +1406,7 @@ ${toolsJson}`;
           }
           return { text, tokens: Math.round(text.length / 4) };
         },
-        reset() { delete sessions[model.id]; },
+        reset() { try { engine.unload(); } catch (e) {} delete sessions[model.id]; },
         destroy() { try { engine.unload(); } catch (e) {} },
       };
       return s;
@@ -1487,7 +1489,11 @@ ${toolsJson}`;
           } catch (e) {}
           return { text, tokens: tokens || Math.round(text.length / 4) };
         },
-        reset() { delete sessions[model.id]; },
+        reset() {
+          try { lm.dispose && lm.dispose(); } catch (e) {}
+          try { processor.dispose && processor.dispose(); } catch (e) {}
+          delete sessions[model.id];
+        },
         destroy() {
           try { lm.dispose && lm.dispose(); } catch (e) {}
           try { processor.dispose && processor.dispose(); } catch (e) {}
