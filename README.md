@@ -200,6 +200,22 @@ Read down a column: TTFT and prefill cost should climb with context. If decode s
 rises, you have found the wall the article describes — and the point at which a chat UI stops feeling
 instant. Sweep settings (sizes + output cap) persist in `localStorage`.
 
+### Context-window guard
+
+A target larger than a model can hold is a guaranteed overflow, and on a long prefill that can waste
+minutes before it fails, so the sweep does not run it. Each model carries a context window (`ctx` in the
+registry — SmolLM2 and Gemma-2 are 8K, Qwen/LFM2.5/FunctionGemma/Gemma-3 are 32K, Gemini Nano 9K), and a
+target that would not fit once the output budget and a small template reserve are counted is **skipped and
+reported**, not run:
+
+- the sweep panel lists which selected models can't reach the top size;
+- each model card shows the sizes its window can't take;
+- the run logs a `⏭ skipped` line and the Context Sweep table shows a yellow *skipped — … exceeds this
+  model's ~8K context window* row in place of that cell (the summary table marks it `⏭️`).
+
+The estimate is advisory, not a hard engine limit: it uses each model's nominal window, so treat a skipped
+row as "probably won't fit" rather than a precise boundary.
+
 
 ## How the vision mode works
 

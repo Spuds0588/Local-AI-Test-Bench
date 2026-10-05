@@ -150,11 +150,11 @@ console.log('\nContext sweep');
 const sweepBlockStart = html.indexOf('const SWEEP_FILLER =');
 const sweepBlockEnd = html.indexOf('/* SWEEP_BLOCK_END */');
 check('sweep helper block is present', sweepBlockStart > -1 && sweepBlockEnd > sweepBlockStart);
-let buildSweepPrompt, sizeLabel, SWEEP_PRESETS;
+let buildSweepPrompt, sizeLabel, SWEEP_PRESETS, sweepTargetFits, maxSweepTarget, partitionSweepSizes, SWEEP_CTX_OVERHEAD;
 try {
   const sweepSrc = html.slice(sweepBlockStart, sweepBlockEnd);
-  ({ buildSweepPrompt, sizeLabel, SWEEP_PRESETS } =
-    new Function(`${sweepSrc}\nreturn { buildSweepPrompt, sizeLabel, SWEEP_PRESETS };`)());
+  ({ buildSweepPrompt, sizeLabel, SWEEP_PRESETS, sweepTargetFits, maxSweepTarget, partitionSweepSizes, SWEEP_CTX_OVERHEAD } =
+    new Function(`${sweepSrc}\nreturn { buildSweepPrompt, sizeLabel, SWEEP_PRESETS, sweepTargetFits, maxSweepTarget, partitionSweepSizes, SWEEP_CTX_OVERHEAD };`)());
   check('sweep helper block evaluates', true);
 } catch (e) { check('sweep helper block evaluates', false, e.message); SWEEP_PRESETS = []; }
 check('sweep shape is registered', 'sweep' in SHAPES);
@@ -173,6 +173,26 @@ if (typeof buildSweepPrompt === 'function' && typeof sizeLabel === 'function') {
     buildSweepPrompt(base, 1) === base);
   check('sizeLabel formats token counts',
     sizeLabel(2048) === '2K' && sizeLabel(32768) === '32K' && sizeLabel(512) === '512 tok');
+}
+
+// The context-window guard: a sweep target that cannot fit a model's window is
+// skipped rather than run. Every chat-capable model must carry a `ctx` so the
+// guard has data to work with.
+const noCtx = MODELS.filter(m => (m.modes || ['chat', 'tool']).includes('chat') && !(Number(m.ctx) > 0)).map(m => m.id);
+check('every chat-capable model declares a context window', noCtx.length === 0, noCtx.join(', '));
+if (typeof sweepTargetFits === 'function' && typeof partitionSweepSizes === 'function' && typeof maxSweepTarget === 'function') {
+  check('SWEEP_CTX_OVERHEAD is a small positive reserve', SWEEP_CTX_OVERHEAD > 0 && SWEEP_CTX_OVERHEAD < 1024, String(SWEEP_CTX_OVERHEAD));
+  check('sweepTargetFits accepts a target that fits the window', sweepTargetFits(8192, 4096, 32));
+  check('sweepTargetFits rejects a target past the window plus output', !sweepTargetFits(8192, 8192, 32));
+  check('sweepTargetFits counts the output budget', sweepTargetFits(4300, 4096, 32) && !sweepTargetFits(4100, 4096, 256));
+  check('sweepTargetFits never blocks an unknown window',
+    sweepTargetFits(null, 65536, 32) && sweepTargetFits(0, 65536, 32) && sweepTargetFits(NaN, 65536, 32));
+  check('maxSweepTarget leaves room for output and overhead',
+    maxSweepTarget(8192, 32) === 8192 - 32 - SWEEP_CTX_OVERHEAD && maxSweepTarget(null, 32) === Infinity);
+  const split = partitionSweepSizes(8192, [2048, 4096, 8192, 32768], 32);
+  check('partitionSweepSizes separates fitting from oversized targets',
+    JSON.stringify(split.fit) === JSON.stringify([2048, 4096]) && JSON.stringify(split.over) === JSON.stringify([8192, 32768]),
+    JSON.stringify(split));
 }
 
 // ---- 5. Hub reachability -----------------------------------------------------

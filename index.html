@@ -695,25 +695,25 @@
 
     const MODELS = [
       // ---- Chrome built-in (Gemini Nano) ----
-      { id: 'nano',                 engine: 'builtin',      modes: ['chat'],     label: 'Gemini Nano',            params: '~1.8B', size: '~1.5GB', note: 'Chrome built-in AI' },
+      { id: 'nano',                 engine: 'builtin',      modes: ['chat'],     label: 'Gemini Nano',            params: '~1.8B', size: '~1.5GB', ctx: 9216, note: 'Chrome built-in AI' },
       // ---- Needle 2 (vendored WASM) ----
-      { id: 'needle2',              engine: 'needle',       modes: ['tool'],     label: 'Needle 2',               params: '45M',   size: '14MB',  note: 'Cactus Compute · agentic tool calling' },
+      { id: 'needle2',              engine: 'needle',       modes: ['tool'],     label: 'Needle 2',               params: '45M',   size: '14MB',  ctx: 2048, note: 'Cactus Compute · agentic tool calling' },
       // ---- Transformers.js (ONNX, WASM or WebGPU) ----
-      { id: 'tf-smollm2-135m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-135M-Instruct-ONNX',        label: 'SmolLM2-135M-Instruct',    params: '135M', size: '~100MB', note: 'Hugging Face' },
-      { id: 'tf-smollm2-360m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-360M-Instruct-ONNX',        label: 'SmolLM2-360M-Instruct',    params: '360M', size: '~230MB', note: 'Hugging Face' },
-      { id: 'tf-lfm25-350m',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/LFM2.5-350M-ONNX',                  label: 'LFM2.5-350M',              params: '350M', size: '~240MB', note: 'Liquid AI · hybrid' },
-      { id: 'tf-functiongemma-270m',engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/functiongemma-270m-it-ONNX',        label: 'FunctionGemma-270M-it',    params: '270M', size: '~200MB', note: 'Google · native tool calling' },
-      { id: 'tf-qwen3-0.6b',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen3-0.6B-ONNX',                   label: 'Qwen3-0.6B',               params: '0.6B', size: '~400MB', note: 'Alibaba' },
-      { id: 'tf-qwen25-0.5b',       engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',        label: 'Qwen2.5-0.5B-Instruct',    params: '0.5B', size: '~340MB', note: 'Alibaba' },
-      { id: 'tf-gemma3-1b',         engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/gemma-3-1b-it-ONNX',                label: 'Gemma-3-1B-it',            params: '1B',   size: '~750MB', note: 'Google · Gemma terms' },
+      { id: 'tf-smollm2-135m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-135M-Instruct-ONNX',        label: 'SmolLM2-135M-Instruct',    params: '135M', size: '~100MB', ctx: 8192, note: 'Hugging Face' },
+      { id: 'tf-smollm2-360m',      engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/SmolLM2-360M-Instruct-ONNX',        label: 'SmolLM2-360M-Instruct',    params: '360M', size: '~230MB', ctx: 8192, note: 'Hugging Face' },
+      { id: 'tf-lfm25-350m',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/LFM2.5-350M-ONNX',                  label: 'LFM2.5-350M',              params: '350M', size: '~240MB', ctx: 32768, note: 'Liquid AI · hybrid' },
+      { id: 'tf-functiongemma-270m',engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/functiongemma-270m-it-ONNX',        label: 'FunctionGemma-270M-it',    params: '270M', size: '~200MB', ctx: 32768, note: 'Google · native tool calling' },
+      { id: 'tf-qwen3-0.6b',        engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen3-0.6B-ONNX',                   label: 'Qwen3-0.6B',               params: '0.6B', size: '~400MB', ctx: 32768, note: 'Alibaba' },
+      { id: 'tf-qwen25-0.5b',       engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/Qwen2.5-0.5B-Instruct-ONNX',        label: 'Qwen2.5-0.5B-Instruct',    params: '0.5B', size: '~340MB', ctx: 32768, note: 'Alibaba' },
+      { id: 'tf-gemma3-1b',         engine: 'transformers', modes: ['chat','tool'], repo: 'onnx-community/gemma-3-1b-it-ONNX',                label: 'Gemma-3-1B-it',            params: '1B',   size: '~750MB', ctx: 32768, note: 'Google · Gemma terms' },
       // ---- WebLLM (WebGPU) ----
-      { id: 'wl-qwen3-0.6b',        engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen3-0.6B-q4f16_1-MLC',               label: 'Qwen3-0.6B (WebGPU)',      params: '0.6B', size: '~500MB', note: 'Alibaba' },
-      { id: 'wl-qwen25-0.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-0.5B-Instruct (WebGPU)', params: '0.5B', size: '~400MB', note: 'Alibaba' },
-      { id: 'wl-qwen25-1.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-1.5B-Instruct (WebGPU)', params: '1.5B', size: '~900MB', note: 'Alibaba' },
-      { id: 'wl-gemma3-1b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma3-1b-it-q4f16_1-MLC',             label: 'Gemma-3-1B-it (WebGPU)',    params: '1B',   size: '~700MB', note: 'Google · Gemma terms' },
-      { id: 'wl-gemma2-2b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', note: 'Google · Gemma terms' },
-      { id: 'wl-smollm2-1.7b',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', note: 'Hugging Face' },
-      { id: 'wl-smollm2-360m',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', note: 'Hugging Face' },
+      { id: 'wl-qwen3-0.6b',        engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen3-0.6B-q4f16_1-MLC',               label: 'Qwen3-0.6B (WebGPU)',      params: '0.6B', size: '~500MB', ctx: 32768, note: 'Alibaba' },
+      { id: 'wl-qwen25-0.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-0.5B-Instruct (WebGPU)', params: '0.5B', size: '~400MB', ctx: 32768, note: 'Alibaba' },
+      { id: 'wl-qwen25-1.5b',       engine: 'webllm',       modes: ['chat','tool'], wlId: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC',    label: 'Qwen2.5-1.5B-Instruct (WebGPU)', params: '1.5B', size: '~900MB', ctx: 32768, note: 'Alibaba' },
+      { id: 'wl-gemma3-1b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma3-1b-it-q4f16_1-MLC',             label: 'Gemma-3-1B-it (WebGPU)',    params: '1B',   size: '~700MB', ctx: 32768, note: 'Google · Gemma terms' },
+      { id: 'wl-gemma2-2b',         engine: 'webllm',       modes: ['chat','tool'], wlId: 'gemma-2-2b-it-q4f16_1-MLC',            label: 'Gemma-2-2B-it (WebGPU)',    params: '2B',   size: '~1.4GB', ctx: 8192, note: 'Google · Gemma terms' },
+      { id: 'wl-smollm2-1.7b',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-1.7B-Instruct-q4f16_1-MLC',    label: 'SmolLM2-1.7B-Instruct (WebGPU)', params: '1.7B', size: '~1.2GB', ctx: 8192, note: 'Hugging Face' },
+      { id: 'wl-smollm2-360m',      engine: 'webllm',       modes: ['chat','tool'], wlId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',    label: 'SmolLM2-360M-Instruct (WebGPU)', params: '360M', size: '~380MB', ctx: 8192, note: 'Hugging Face' },
 
       // ---- Vision / image understanding (Transformers.js, image-text-to-text) ----
       // Verified against the Hugging Face Hub API (repos, ONNX file names and
@@ -841,6 +841,32 @@ tide tables still matter to the handful of boats that moor at the quay.
       const cut = filler.lastIndexOf(' ');
       if (cut > want - 200 && cut > 0) filler = filler.slice(0, cut);
       return filler + SWEEP_SEP + baseText;
+    }
+    // A chat call costs a little more than the padded prompt itself: role
+    // markers, the system prompt and BOS. Reserve a small flat overhead so the
+    // guard never waves through a target that only just fits.
+    const SWEEP_CTX_OVERHEAD = 64;
+    // Does padding to `size` tokens, plus `outTokens` of output and the call
+    // overhead, still fit a model's context window? A model with no known window
+    // (`ctx` missing or non-positive) never blocks — the guard is advisory.
+    function sweepTargetFits(ctx, size, outTokens) {
+      const c = Number(ctx);
+      if (!(c > 0)) return true;
+      const need = Math.round(Number(size) || 0) + Math.round(Number(outTokens) || 0) + SWEEP_CTX_OVERHEAD;
+      return need <= c;
+    }
+    // Largest sweep target a model can still take with `outTokens` of output.
+    function maxSweepTarget(ctx, outTokens) {
+      const c = Number(ctx);
+      if (!(c > 0)) return Infinity;
+      return Math.max(0, Math.floor(c) - Math.round(Number(outTokens) || 0) - SWEEP_CTX_OVERHEAD);
+    }
+    // Split requested sizes into those a model can fit and those it cannot, so a
+    // sweep can report the oversized targets instead of running doomed prefills.
+    function partitionSweepSizes(ctx, sizes, outTokens) {
+      const fit = [], over = [];
+      (sizes || []).forEach(s => (sweepTargetFits(ctx, s, outTokens) ? fit : over).push(s));
+      return { fit, over };
     }
     /* SWEEP_BLOCK_END */
 
@@ -1188,6 +1214,11 @@ tide tables still matter to the handful of boats that moor at the quay.
     function modelRow(m, ready, runnable = true) {
       const fit = modelFit(m);
       const over = fit.state === 'over';
+      // When a sweep is the run shape, tell the user up-front which of their
+      // chosen context sizes this model's window cannot reach (they're skipped).
+      const sweepOver = (runShape === 'sweep' && m.ctx)
+        ? partitionSweepSizes(m.ctx, prefs.sweepSizes || [], prefs.sweepTokens || DEFAULT_SWEEP_TOKENS).over
+        : [];
       const l = document.createElement('label');
       l.className = 'model-opt' + (ready ? '' : ' not-ready') + (runnable ? '' : ' cap-locked') + (over ? ' over-budget' : '');
       const cb = document.createElement('input');
@@ -1215,6 +1246,7 @@ tide tables still matter to the handful of boats that moor at the quay.
         <div class="m-meta">${escHTML(m.params)} · ${escHTML(m.size)} download${m.note ? ' · ' + escHTML(m.note) : ''}</div>
         ${capabilityBadges(m)}
         ${over ? `<div class="m-meta over-note">⚠️ likely too heavy for this device — needs ~${fit.need.toFixed(1)}GB ${fit.kind}, you reported ${fit.have}GB. Still runnable.</div>` : ''}
+        ${sweepOver.length ? `<div class="m-meta over-note">⏭️ sweep target ${sweepOver.map(sizeLabel).join(', ')} exceed this model's ~${sizeLabel(m.ctx)} window — those sizes are skipped.</div>` : ''}
         ${runnable ? '' : '<div class="m-meta cap-lock-note">Switch the test type above to run this model.</div>'}
         ${m.experimental ? `<div class="m-meta" style="color:var(--warn)">⚠️ experimental — ${escHTML(m.experimental)}</div>` : ''}`;
       if (!ready) {
@@ -2698,6 +2730,19 @@ tide tables still matter to the handful of boats that moor at the quay.
     /* ============================================================
      *  Run orchestration
      * ============================================================ */
+    /* A sweep target that can't fit a model's context window is recorded as a
+       skipped row instead of run, so the report shows why a cell is missing. */
+    function skippedSweepResult(m, size, outTokens) {
+      return {
+        modelId: m.id, label: `${m.label} · ${sizeLabel(size)}`, baseLabel: m.label,
+        engine: m.engine, params: m.params, sweepSize: size,
+        outputs: [], durations: [], tokens: [], stages: [], loadMs: null,
+        status: 'skipped', skipped: true,
+        error: `${sizeLabel(size)} target exceeds this model's ~${sizeLabel(m.ctx)} context window`,
+        scores: [], expectedKind: null,
+      };
+    }
+
     async function runBench() {
       if (running) return;
       const chainShape = runShape === 'chain';
@@ -2834,9 +2879,19 @@ tide tables still matter to the handful of boats that moor at the quay.
         sweepBase = $('#userPrompt').value.trim() + fileText;
         const out = [];
         for (const m of selected) {
+          const { over } = partitionSweepSizes(m.ctx, sweepSizes, sweepTokens);
+          if (over.length) log(`⚠ ${m.label}: skipping ${over.map(sizeLabel).join(', ')} — beyond its ~${sizeLabel(m.ctx)} context window.`, 'warn');
           for (const size of sweepSizes) {
             if (stopped) break;
             const card = currentCards[`${m.id}::${size}`];
+            // A target past the model's window is recorded and skipped — a
+            // doomed multi-minute prefill helps nobody.
+            if (over.includes(size)) {
+              out.push({ model: m, res: skippedSweepResult(m, size, sweepTokens) });
+              if (card) card.setState('warn', `⏭️ skipped — ${sizeLabel(size)} exceeds ~${sizeLabel(m.ctx)} window`);
+              log(`⏭ ${m.label} · ${sizeLabel(size)} skipped (over context window)`);
+              continue;
+            }
             try {
               const res = await runModel(m, card, {
                 userPrompt: buildSweepPrompt(sweepBase, size),
@@ -3112,7 +3167,9 @@ tide tables still matter to the handful of boats that moor at the quay.
              <td>${cell(a.promptTps != null ? a.promptTps.toFixed(0) : null)}</td>
              <td>${cell(a.decodeTps != null ? a.decodeTps.toFixed(1) : null)}</td>
              <td>${cell(outTok)}</td>`
-          : `<td colspan="5" style="color:var(--danger);">❌ ${escHTML(m.error || m.status)}</td>`;
+          : m.status === 'skipped'
+            ? `<td colspan="5" style="color:var(--warn);">⏭️ skipped — ${escHTML(m.error || 'over context window')}</td>`
+            : `<td colspan="5" style="color:var(--danger);">❌ ${escHTML(m.error || m.status)}</td>`;
         return `<tr class="sweep-row">
           <td><b>${escHTML(m.baseLabel || m.label)}</b></td>
           <td>${escHTML(sizeLabel(m.sweepSize))}</td>
@@ -3133,7 +3190,8 @@ tide tables still matter to the handful of boats that moor at the quay.
         const stage = (m.stages || [])[last] || null;
         return { m, dur, toks, text, tps, stage };
       }).sort((a, b) => a.dur - b.dur);
-      const fastest = rows[0];
+      // Skipped sweep targets have no duration; never let one win the crown.
+      const fastest = rows.find(r => r.m.status === 'ok');
       tbody.innerHTML = rows.map(r => {
         const prev = previousOutputFor(r.m.modelId, entry);
         const diff = prev !== undefined && prev !== null && r.m.outputs.length ? diffPercent(prev, r.m.outputs[r.m.outputs.length - 1]) : null;
@@ -3143,7 +3201,7 @@ tide tables still matter to the handful of boats that moor at the quay.
           <td><b>${escHTML(r.m.label)}</b></td>
           <td>${ENGINES[r.m.engine].name}</td>
           <td>${escHTML(r.m.params)}</td>
-          <td>${r.m.status === 'ok' ? '✅' : '❌ ' + escHTML(r.m.error || r.m.status)}</td>
+          <td>${r.m.status === 'ok' ? '✅' : r.m.status === 'skipped' ? '⏭️ ' + escHTML(r.m.error || 'over context window') : '❌ ' + escHTML(r.m.error || r.m.status)}</td>
           <td>${sc ? `<span class="${sc.cls}" title="${escHTML(sc.detail || '')}">${sc.label}</span>` : '<span class="hint">–</span>'}</td>
           <td>${r === fastest ? '🏆 ' : ''}${fmt(r.dur)}</td>
           <td>${st && st.ttftMs != null ? fmt(st.ttftMs / 1000) : '<span class="hint">–</span>'}</td>
@@ -3446,13 +3504,26 @@ tide tables still matter to the handful of boats that moor at the quay.
     function renderSweepEstimate() {
       const el = $('#sweepEstimate');
       if (!el) return;
+      el.style.whiteSpace = 'pre-line';
       const sizes = prefs.sweepSizes || [];
       const tok = prefs.sweepTokens || DEFAULT_SWEEP_TOKENS;
-      if (!sizes.length) { el.textContent = '⚠️ Pick at least one context size.'; return; }
+      if (!sizes.length) { el.innerHTML = '⚠️ Pick at least one context size.'; return; }
       const total = sizes.reduce((a, b) => a + b, 0);
-      el.textContent = `${sizes.length} size${sizes.length === 1 ? '' : 's'} · ` +
+      let html = `${sizes.length} size${sizes.length === 1 ? '' : 's'} · ` +
         `${sizeLabel(sizes[0])}–${sizeLabel(sizes[sizes.length - 1])} · ` +
         `~${total.toLocaleString()} prompt tokens per model · up to ${tok} output tokens at each size.`;
+      // Flag selected models whose context window can't reach the top size — the
+      // run skips those targets rather than padding into a certain overflow.
+      const top = sizes[sizes.length - 1];
+      const limited = MODELS.filter(m => selectedIds.has(m.id)
+        && (m.modes || ['chat', 'tool']).includes('chat')
+        && m.ctx && !sweepTargetFits(m.ctx, top, tok));
+      if (limited.length) {
+        html += `\n⚠️ ${limited.length} selected model(s) can't reach ${sizeLabel(top)} ` +
+          `(${limited.slice(0, 3).map(m => `${escHTML(m.label)} ~${sizeLabel(m.ctx)}`).join(', ')}` +
+          `${limited.length > 3 ? ', …' : ''}) — those targets are skipped, not run.`;
+      }
+      el.innerHTML = html;
     }
 
     function setRunShape(key) {

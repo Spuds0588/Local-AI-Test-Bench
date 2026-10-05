@@ -11,6 +11,9 @@ Live at: https://spuds0588.github.io/Local-AI-Test-Bench/
 - [x] **Vision capability** — 6 image-understanding models on a `Transformers.js (Vision)` engine (SmolVLM-256M/500M/2B, LFM2.5-VL-450M, Moondream2*, Phi-3.5-vision). The three smallest run on CPU/WASM; verified end-to-end through the real UI. (*Moondream2 is experimental — Transformers.js has no `moondream1` class yet.)
 - [x] **Evaluation scoring** — keyword and tool-call grading (`✅ pass / ⚠️ partial / ❌ fail`), aggregate scoreboard, scores in the side-by-side table and CSV export; unit-tested against the shipped functions.
 - [x] **Capability-based organisation** — `CAPABILITIES` registry (💬 chat / 🛠️ tool / 👁️ vision) drives a capability picker in step 1; the model picker groups by capability (active one selectable, others collapsed read-only previews with a *Test this instead* switch); Settings groups both lists by primary capability with per-row capability badges. Models outside the active capability can't be selected.
+- [x] **Context-length sweep** — a fourth run shape runs one prompt padded to growing context sizes (2K–32K presets), one card per model per size, with a dedicated **Context Sweep** report, CSV/print wiring and `localStorage` persistence. Context-window guard skips (and reports) targets a model's window can't hold. `npm run check` covers the padding + guard helpers.
+- [x] **Per-stage timings** — TTFT split out from decode, with prefill (prompt ~tok/s) and decode ~tok/s surfaced on the cards, summary table, history and CSV.
+- [x] **Device-fit advisory** — self-reported cores/RAM/VRAM in Settings → This Device; models the reported hardware likely can't carry are greyed with a `⚠️ likely too heavy` note (advisory only — still selectable and runnable).
 
 ## Backlog (priority order)
 
